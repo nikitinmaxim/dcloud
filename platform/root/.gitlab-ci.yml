@@ -1,0 +1,110 @@
+image: registry.zotona.com/devops/images/buildimage:master
+
+cache:
+  paths:
+    - .m2/repository/
+
+stages:
+  - advance
+  - deploy
+  - test
+  - push
+  - clean
+
+before_script:
+  - set -x
+  - mkdir -p ~/.ssh && cp /secret/id_rsa ~/.ssh/ && chmod 600 ~/.ssh/id_rsa
+  - ssh-keygen -y -f ~/.ssh/id_rsa > ~/.ssh/id_rsa.pub
+  - ssh-keyscan "gitlab.zotona.com" >> ~/.ssh/known_hosts
+  - git config --global user.email "buildbot@${CI_REGISTRY#*.}"
+  - git config --global user.name "Mr. Roboto"
+  - git fetch && git rebase "origin/$CI_BUILD_REF_NAME"
+  - git submodule init
+  - '[ -e "$SUBMODULE" ] && git submodule update "$SUBMODULE" && { cd "$SUBMODULE" && git checkout "$CI_BUILD_REF_NAME" && cd .. || exit 1; } || true'
+
+advance:
+  only: 
+    - triggers
+  stage: advance
+  script: |
+    if [ -e "$SUBMODULE" ]; then
+      [ -e "$SUBMODULE/.gitlabignore" ] && {
+        rm -rf "$SUBMODULE"
+        git submodule deinit -f "$SUBMODULE"
+        rm -rf ".git/modules/$SUBMODULE"
+        git rm -f "$SUBMODULE"
+        git commit -m "Remove $SUBMODULE"
+        git push "git@gitlab.zotona.com:$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME.git" "HEAD:$CI_BUILD_REF_NAME" || exit 1
+        exit 0
+      } || {
+        git add "$SUBMODULE"
+        git commit -m "Advance $SUBMODULE" || true
+      }
+    else
+      git clone "git@gitlab.zotona.com:$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME.git" --depth=1 -b "$CI_BUILD_REF_NAME" "/tmp/$SUBMODULE"
+      [ -e "/tmp/$SUBMODULE/.gitlabignore" ] || {
+        git submodule add -b "$CI_BUILD_REF_NAME" "$SUBMODULE_URL" "$SUBMODULE" || exit 1
+        git commit -m "Introduce $SUBMODULE"
+      }
+    fi
+ 
+    git fetch && git rebase origin/$CI_BUILD_REF_NAME   
+    git push "git@gitlab.zotona.com:$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME.git" "HEAD:$CI_BUILD_REF_NAME" || exit 1
+
+deploy:
+  only: 
+    - triggers
+  stage: deploy
+  services:
+    - name: docker:dind
+  script: |
+    exit 0
+    [ -e "$SUBMODULE" ] || exit 0
+    [ "$CI_BUILD_REF_NAME" = "master" ] || exit 0
+    for s in $(git config --file .gitmodules --get-regexp path | awk '{ print $2 }'); do
+      if [ "$s" = "$SUBMODULE" ]; then
+        tag="master"
+      else
+        tag="testing"
+      fi
+      docker -H 127.0.0.1 pull "$CI_REGISTRY/$CI_PROJECT_NAMESPACE/$s:$tag" || continue
+      docker -H 127.0.0.1 tag "$CI_REGISTRY/$CI_PROJECT_NAMESPACE/$s:$tag" "$CI_REGISTRY/$CI_PROJECT_NAMESPACE/root/$s:$SUBMODULE"
+      docker -H 127.0.0.1 login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+      docker -H 127.0.0.1 push "$CI_REGISTRY/$CI_PROJECT_NAMESPACE/root/$s:$SUBMODULE"
+    done
+    git clone "git@gitlab.zotona.com:$CI_PROJECT_NAMESPACE/deploy" --depth=1 -b "master" "/tmp/deploy"
+    ( cd "/tmp/deploy" && { make deploy IMAGES=$CI_REGISTRY/$CI_PROJECT_NAMESPACE/root TAG=$SUBMODULE || exit 1; } && echo "Deployed"; ) || exit 1
+
+test:
+  only:
+    - triggers
+  stage: test
+  script: |
+    exit 0
+    [ -e "$SUBMODULE" ] || exit 0
+    [ "$CI_BUILD_REF_NAME" = "master" ] || exit 0
+    git clone "git@gitlab.zotona.com:$CI_PROJECT_NAMESPACE/acceptance" --depth=1 -b "master" "/tmp/acceptance"
+    ( cd "/tmp/acceptance" && { make test || exit 1; } && echo "Tested"; ) || exit 1
+
+push:
+  only:
+    - triggers
+  stage: push
+  services:
+    - name: docker:dind
+  script: |
+    [ -e "$SUBMODULE" ] || exit 0
+    [ "$CI_BUILD_REF_NAME" = "master" ] || true
+    ( cd "$SUBMODULE" && git push "git@gitlab.zotona.com:$CI_PROJECT_NAMESPACE/$SUBMODULE.git" "HEAD:testing" ) || exit 1
+
+undeploy:
+  only:
+    - triggers
+  stage: clean
+  when: always
+  script: |
+    exit 0
+    [ -e "$SUBMODULE" ] || exit 0
+    [ "$CI_BUILD_REF_NAME" = "master" ] || exit 0
+    git clone "git@gitlab.zotona.com:$CI_PROJECT_NAMESPACE/deploy" --depth=1 -b "master" "/tmp/deploy"
+    ( cd "/tmp/deploy" && { make undeploy TAG=$SUBMODULE || exit 1; } && echo "Undeployed"; ) || exit 1

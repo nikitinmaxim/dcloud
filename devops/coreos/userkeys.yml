@@ -1,0 +1,71 @@
+- hosts: config
+  become: false
+  vars:
+    config_root: "{{hostvars[inventory_hostname].config_root}}"
+    cluster: "{{hostvars[inventory_hostname].cluster}}"
+  tasks:
+    - name: Generate all user certs
+      shell: |
+        cd {{config_root}}/certs
+        export EASYRSA_PKI={{cluster}}
+        [ -e {{cluster}}/issued/{{cluster}}-{{user}}.crt ] && [ -e {{cluster}}/private/{{cluster}}-{{user}}.key ] || {
+          ./easyrsa \
+            --batch \
+            --req-cn={{cluster}}-{{user}} \
+            gen-req {{cluster}}-{{user}} nopass
+          ./easyrsa \
+            --batch \
+        {% if sans is defined %}
+            --subject-alt-name={{sans}} \
+        {% endif %}
+            sign-req {{usage | default('client')}} {{cluster}}-{{user}}
+        }
+    - name: Make kubeconfig
+      shell:
+        cmd: |
+          crt=$(openssl x509 < {{config_root}}/certs/{{cluster}}/issued/{{cluster}}-{{user}}.crt | base64 -w0)
+          key=$(cat {{config_root}}/certs/{{cluster}}/private/{{cluster}}-{{user}}.key | base64 -w0)
+          cat <<EOF
+          apiVersion: v1
+          kind: Config
+          current-context: {{cluster}}
+          preferences: {}
+          clusters:
+          - name: {{cluster}}
+            cluster:
+              insecure-skip-tls-verify: true
+              server: https://manager.{{cluster}}.zotona.com
+          contexts:
+          - name: {{cluster}}
+            context:
+              cluster: {{cluster}}
+              namespace: default
+              user: {{cluster}}
+          users:
+          - name: {{cluster}}
+            user:
+              client-certificate-data: $crt
+              client-key-data: $key
+          EOF
+      register: kubeconf
+    - name: Make CA
+      shell: |
+        cat {{config_root}}/certs/{{cluster}}/ca.crt
+      register: ca
+    - name: Make Cert
+      shell: |
+        openssl x509 < {{config_root}}/certs/{{cluster}}/issued/{{cluster}}-{{user}}.crt
+      register: crt
+    - name: Make Key
+      shell: |
+        cat {{config_root}}/certs/{{cluster}}/private/{{cluster}}-{{user}}.key
+      register: key
+    - name: Make tempdir
+      local_action: file path=temp state=directory
+    - name: Produce output
+      local_action: >
+        shell
+        echo "{{kubeconf.stdout}}" > temp/{{cluster}}.config;
+        echo "{{ca.stdout}}" > temp/{{cluster}}.ca;
+        echo "{{crt.stdout}}" > temp/{{cluster}}-{{user}}.crt;
+        echo '{{key.stdout}}' > temp/{{cluster}}-{{user}}.key;

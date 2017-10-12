@@ -1,0 +1,66 @@
+@import "../../node_modules/bootstrap/scss/variables";
+@import "../../node_modules/bootstrap/scss/mixins";
+@import "../../node_modules/bootstrap/scss/buttons";
+@import "colors";
+
+$btn-border-width: 1px;
+$btn-transition: all .2s ease-in-out;
+$btn-radius: .25rem;
+$color: $white; // default color
+
+@mixin button-outline() {
+  background-image: none;
+  background-color: transparent;
+}
+
+@mixin button-bg($color) {
+  color: $color;
+  border-color: $color;
+}
+
+@mixin button-hover($color) {
+  &:focus,
+  &:active,
+  &:hover {
+    color: $white;
+    background-color: $color;
+    border-color: $color;
+  }
+}
+
+@mixin btn() {
+  display: inline-block;
+  font-weight: 400;
+  line-height: 1.25;
+  text-align: center;
+  white-space: nowrap;
+  vertical-align: middle;
+  user-select: none;
+  border: $btn-border-width solid transparent;
+  padding: .5rem 1rem;
+  font-size: 1rem;
+  border-radius: $btn-radius;
+  transition: $btn-transition;
+  &.disabled,
+  &:disabled {
+    opacity: .65;
+  }
+}
+
+@mixin btn-group() {
+
+}
+
+@mixin btn-outline-primary() {
+  @include btn ();
+  @include button-outline ();
+  @include button-bg ($blue);
+  @include button-hover ($blue);
+}
+
+@mixin btn-outline-secondary() {
+  @include btn ();
+  @include button-outline ();
+  @include button-bg ($gray-light);
+  @include button-hover ($gray-light);
+}

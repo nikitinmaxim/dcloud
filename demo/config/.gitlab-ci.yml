@@ -1,0 +1,43 @@
+image: registry.zotona.com/devops/images/buildimage:master
+
+variables:
+  M2_REPO: .m2/repository
+  MAVEN_OPTS: -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=WARN -Dorg.slf4j.simpleLogger.showDateTime=true -Djava.awt.headless=true
+  MAVEN_CLI_OPTS: --batch-mode --errors --fail-at-end --show-version --settings /secret/settings.xml
+
+cache:
+  paths:
+    - .m2/repository
+
+stages:
+  - build
+  - test
+  - deploy
+
+build:
+  stage: build
+  script: |
+    mvn $MAVEN_CLI_OPTS compile
+  artifacts:
+    expire_in: 1 day
+    paths:
+      - target/*.jar
+
+test:
+  stage: test
+  script: |
+    mvn $MAVEN_CLI_OPTS verify test
+
+deploy:
+  stage: deploy
+  only:
+    - master
+    - testing
+  services:
+    - name: docker:dind
+  script: |
+    mvn $MAVEN_CLI_OPTS package
+    docker -H 127.0.0.1 build -t $CI_REGISTRY/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:$CI_COMMIT_REF_NAME .
+    docker -H 127.0.0.1 login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
+    docker -H 127.0.0.1 push $CI_REGISTRY/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:$CI_COMMIT_REF_NAME 
+

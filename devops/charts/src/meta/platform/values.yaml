@@ -1,0 +1,8 @@
+global:
+  platform:
+    configService: http://config-platform-service:8888
+    discoveryService: http://discovery-service.platform.svc.cluster.local:8761
+rabbitmq:
+  rabbitmqUsername: admin
+  rabbitmqPassword: admin
+  rabbitmqNodeName: rabbit-mon

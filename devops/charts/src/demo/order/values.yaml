@@ -1,0 +1,4 @@
+metrics:
+ path: /manage/prometheus
+ port: 80
+ enabled: true

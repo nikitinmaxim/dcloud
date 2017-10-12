@@ -1,0 +1,19 @@
+- hosts: config
+  become: false
+  vars:
+    config_root: "{{hostvars[inventory_hostname].config_root}}"
+    cluster: "{{hostvars[inventory_hostname].cluster}}"
+    domain: "{{hostvars[inventory_hostname].domain}}"
+    dns_servers: "{{hostvars[inventory_hostname].dns_servers}}"
+    container_net: "{{hostvars[inventory_hostname].container_net}}"
+    service_net: "{{hostvars[inventory_hostname].service_net}}"
+    kube_image: "{{hostvars[inventory_hostname].kube_image}}"
+    http_proxy: "{{hostvars[inventory_hostname].http_proxy | default('')}}"
+    https_proxy: "{{hostvars[inventory_hostname].https_proxy | default('')}}"
+    internal_dns: "{{hostvars[inventory_hostname].internal_dns | default('')}}"
+    external_cert: "{{hostvars[inventory_hostname].external_cert | default('')}}"
+    no_proxy_literal_list: "{{hostvars[inventory_hostname].no_proxy_literal | default('') | ternary([hostvars[inventory_hostname].no_proxy_literal],[])}}"
+    no_proxy: "{{hostvars[inventory_hostname].no_proxy_groups | default([]) | map('extract', groups) | map('join', ',') | list | union(no_proxy_literal_list) | join(',')}}"
+    insecure_registry: "{{hostvars[inventory_hostname].insecure_registry | default('')}}"
+  roles:
+    - config

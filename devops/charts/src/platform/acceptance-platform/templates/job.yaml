@@ -1,0 +1,29 @@
+{{- if .Values.runTests -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    app: {{ template "name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  template:
+    metadata:
+      labels:
+        app: {{ template "name" . }}
+        release: {{ .Release.Name }}
+    spec:
+      containers:
+      - name: {{ .Chart.Name }}
+        env:
+{{ include "proxyenv" . | indent 10 }}
+          - name: AUTH_TOKEN_URL
+            value: {{ .Values.authTokenUrl }}
+          - name: ADMIN_APPS_URL
+            value: {{ .Values.adminAppsUrl }}
+        image: "{{ .Values.global.platform.repository }}/acceptance:{{ .Values.global.platform.imageTag }}"
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+      restartPolicy: {{ .Values.restartPolicy }}
+{{- end -}}

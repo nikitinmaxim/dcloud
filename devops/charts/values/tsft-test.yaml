@@ -1,0 +1,85 @@
+# Default values for dcloud platform.
+# Управление зависимостями платформы
+tags:
+  metrics: true
+  monitoring: true
+  rabbitmq: true
+  admin: true
+  auth: true
+  discovery: true
+  config: true
+  turbine: true
+  zipkin: true
+  gateway: true
+
+
+global:
+  minikube:
+    enabled: false
+  repository: quay.io/dcloud
+  imageTag: latest
+  proxy: {}
+  ingress:
+    http_protocol: http
+    suffix: zotona.com
+    balancers: []
+  platform:
+    repository: registry.zotona.com/platform
+    imageTag: latest
+  demo:
+    repository: registry.zotona.com/demo
+    imageTag: latest
+  dns:
+    internal: 10.30.0.10
+  ports:
+    5022: "gitlab/gitlab:22"
+  storage:
+    class: standard
+    replicate: 1
+    nodes:
+      - host: storage0.test.cluster
+        zone: 1
+        device: /dev/sdb
+  postgres:
+    persistentVolume: 1Gi
+  redis:
+    persistentVolume: 1Gi
+  rabbitmq:
+    persistentVolume: 1Gi
+  grafana:
+    persistentVolume: 1Gi
+  prometheus:
+    alertmanagerVolume: 1Gi
+    serverVolume: 1Gi
+  gitlab:
+    schema: https
+    repository: docker.io/gitlab
+    imageTag: latest
+    nexusVolume: 5Gi
+    storageVolume: 10Gi
+    registryVolume: 50Gi
+    configVolume: 1Gi
+    sonardataVolume: 1Gi
+    sonarextsVolume: 1Gi
+    runnerConcurrent: 10
+    buildbotToken: xookRf4Qes-TvaZmP4j2
+    runnerToken: tQtCbx5UZy_ByS7FyzUH
+    runnerSecrets:
+      settings.xml: 
+        content: |
+          <settings>
+            <servers>
+              <server>
+                <id>${env.NEXUS_ID}</id>
+                <username>${env.NEXUS_USER}</username>
+                <password>${env.NEXUS_PASSWORD}</password>
+              </server>
+            </servers>
+            <localRepository>${env.M2_REPO}</localRepository>
+          </settings>
+
+elasticsearch:
+  master:
+    replicas: 1
+    env:
+      NUMBER_OF_MASTERS: "1"

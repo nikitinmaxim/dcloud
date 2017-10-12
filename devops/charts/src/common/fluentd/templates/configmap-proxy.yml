@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluentd-proxy-config
+
+data:
+  haproxy.cfg: |
+{{- if .Values.global.minikube.enabled }}
+{{ .Files.Get "files/ha-minikube.cfg" | indent 6 }}
+{{- else }}
+{{ .Files.Get "files/ha-cluster.cfg" | indent 6 }}
+{{- end -}}

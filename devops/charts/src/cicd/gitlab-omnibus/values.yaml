@@ -1,0 +1,86 @@
+# Default values for kubernetes-gitlab-demo.
+# This is a YAML-formatted file.
+
+# Required variables
+
+# baseDomain is the top-most part of the domain. Subdomains will be generated
+# for gitlab, mattermost, registry, and prometheus.
+# Recommended to set up an A record on the DNS to *.your-domain.com to point to
+# the baseIP
+# e.g. *.your-domain.com.	A	300	baseIP
+baseDomain: sotona.local
+
+# legoEmail is a valid email address used by Let's Encrypt. It does not have to
+# be at the baseDomain.
+# legoEmail: zotona@gmail.com
+
+# Optional variables
+# baseIP is an externally provisioned static IP address to use instead of the provisioned one.
+# baseIP: http://192.168.64.18/
+nameOverride: gitlab
+# `ce` or `ee`
+gitlab: ce
+gitlabCEImage: s-gitlab-elb-01:443/gitlab-ce
+gitlabEEImage: gitlab/gitlab-ee:9.5.2-ee.0
+postgresPassword: NDl1ZjNtenMxcWR6NXZnbw==
+initialSharedRunnersRegistrationToken: "tQtCbx5UZy_ByS7FyzUH"
+mattermostAppSecret: NDl1ZjNtenMxcWR6NXZnbw==
+mattermostAppUID: aadas
+postgresImage: postgres:9.6.3
+# If you disable postgresDedicatedStorage, you should consider bumping up gitlabRailsStorageSize
+postgresDedicatedStorage: true
+# Valid values for provider are `gke` for Google Container Engine. Leaving it blank (or any othervalue) will disable fast disk options.
+provider: default
+healthCheckToken: 'SXBAQichEJasbtDSygrD'
+# Optional, for GitLab EE images only
+#gitlabEELicense: base64-encoded-license
+
+gitlab-runner:
+  checkInterval: 1
+  # runnerRegistrationToken must equal initialSharedRunnersRegistrationToken
+  resources:
+    limits:
+      memory: 500Mi
+      cpu: 600m
+    requests:
+      memory: 500Mi
+      cpu: 600m
+  runners:
+    privileged: true
+
+## Configuration values for the postgresql dependency.
+## ref: https://github.com/kubernetes/charts/blob/master/stable/postgresql/README.md
+##
+postgresql:
+  nameOverride: gitlab-postgresql
+  # 9.6 is the newest supported version for the GitLab container
+  imageTag: "9.6"
+  cpu: 1000m
+  memory: 1Gi
+
+  postgresUser: gitlab
+  postgresPassword: gitlab
+  postgresDatabase: gitlab
+
+  persistence:
+    size: 5Gi
+
+## Configuration values for the redis dependency.
+## ref: https://github.com/kubernetes/charts/blob/master/stable/redis/README.md
+##
+redis:
+  nameOverride: gitlab-redis
+  redisPassword: "gitlab"
+
+  resources:
+    requests:
+      memory: 1Gi
+
+  persistence:
+    size: 5Gi
+
+global:
+  gitlab:
+    storageVolume: 5Gi
+    registryVolume: 5Gi
+    configVolume: 1Gi

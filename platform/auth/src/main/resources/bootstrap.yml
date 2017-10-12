@@ -1,0 +1,28 @@
+spring:
+  application:
+    name: auth-service
+  cloud:
+    inetutils:
+      preferred-networks:
+        - 10.0
+      ignored-interfaces:
+        - eth2
+        - eth2@*
+    config:
+      enabled: true
+      uri: http://config-platform-service
+      failFast: false
+      retry:
+        initialInterval: 3000
+        maxAttempts: 100
+
+recaptcha:
+  validation:
+    secret-key: 6LfLCycUAAAAAOLqi48DqM2Wu9L7P-riANg_oFA4
+  testing:
+    enabled: false
+    success-result: false
+  security:
+    continue-on-validation-http-error: false
+    login-failures-threshold: 0
+    failure-url: /login.html

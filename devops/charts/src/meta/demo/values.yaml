@@ -1,0 +1,7 @@
+global:
+  demo:
+    configService: http://config-demo-service:8888
+rabbitmq:
+  rabbitmqUsername: admin
+  rabbitmqPassword: admin
+  rabbitmqNodeName: rabbit-mon.platform.svc.cluster.local

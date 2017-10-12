@@ -1,0 +1,6 @@
+- hosts: config
+  become: false
+  vars:
+    config_root: "{{hostvars[inventory_hostname].config_root}}"
+  roles:
+    - init

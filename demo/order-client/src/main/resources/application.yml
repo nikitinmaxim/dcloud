@@ -1,0 +1,63 @@
+server:
+  port: 8080
+  session:
+    cookie:
+      name: ORDERJSESSIONID
+    timeout: 360000
+
+#spring:
+#  resources:
+#    static-locations:
+#      - file:/opt/projects/dripcloud/gitlab/root/demo/order-client/src/main/resources/static/
+
+oauth2settings:
+  client:
+    id: order-service
+    clientId: order-service
+    clientSecret: 123456
+    authenticationScheme: query
+    clientAuthenticationScheme: header
+
+    preEstablishedRedirectUri: http://localhost:8080/login/code
+    registeredRedirectUri: http://localhost:8080/login/code
+#    preEstablishedRedirectUri: http://demo.zotona.com/login/code
+#    registeredRedirectUri: http://demo.zotona.com/login/code
+
+#    preEstablishedRedirectUri: http://api.zotona.com/order/login/order
+#    registeredRedirectUri: http://api.zotona.com/order/login/order
+
+#    accessTokenUri: http://api.zotona.com/auth/oauth/token
+#    userAuthorizationUri: http://api.zotona.com/auth/oauth/authorize
+
+    accessTokenUri: http://gateway.192.168.99.100.nip.io/auth/oauth/token
+    userAuthorizationUri: http://gateway.192.168.99.100.nip.io/auth/oauth/authorize
+
+    useCurrentUri: false
+    scope:
+      - FOO
+  resource:
+#    userInfoUri: http://dripka.com:8080/auth/api/user/principal.json
+#    userInfoUri: http://api.zotona.com/auth/api/user/principal.json
+    userInfoUri: http://gateway.192.168.99.100.nip.io/auth/api/user/principal.json
+    preferTokenInfo: true
+
+security:
+  basic:
+    enabled: false
+
+logging:
+  level:
+    org.springframework.security: DEBUG
+
+#catalog.url: http://dripka.com:8080/catalog/api/
+#customer.url: http://dripka.com:8080/customer/api/
+#order.url: http://dripka.com:8080/order/api/
+#order.url: http://localhost:8083/order/api/
+
+#catalog.url: http://api.zotona.com/catalog/api/
+#customer.url: http://api.zotona.com/customer/api/
+#order.url: http://api.zotona.com/order/api/
+
+catalog.url: http://gateway.192.168.99.100.nip.io/catalog/api/
+customer.url: http://gateway.192.168.99.100.nip.io/customer/api/
+order.url: http://gateway.192.168.99.100.nip.io/order/api/

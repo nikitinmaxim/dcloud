@@ -1,0 +1,30 @@
+info:
+  version: 1.0.0
+  component: микросервис "Управления заказами"
+
+logging:
+  level:
+    #org.dclou.example.demogpb: TRACE
+    #org.springframework.security: DEBUG
+
+server:
+  context-path: /order
+  port: 8083
+  ssl:
+    enabled: false
+  session:
+    cookie:
+      name: JSESSIONIDORDERSRV
+  use-forward-headers: true
+
+management:
+  port: ${server.port}
+  security.enabled: false
+  context-path: /manage
+  trace:
+    include: request_headers,response_headers,cookies,authorization_header,errors,path_info,path_translated,context_path,user_principal,parameters,query_string,auth_type,remote_address,session_id,remote_user
+
+security:
+  sessions: stateless
+  user:
+    password: password

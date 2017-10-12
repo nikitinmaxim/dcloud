@@ -1,0 +1,34 @@
+- name: Generate certs
+  shell: |
+    cd {{config_root}}/certs
+    export EASYRSA_PKI={{cluster}}
+    [ -e {{cluster}}/ca.crt ] || {
+      ./easyrsa --batch init-pki
+      ./easyrsa --batch --req-cn={{cluster}} build-ca nopass
+    }
+    [ -e {{cluster}}/private/serviceaccount.key ] || {
+      ./easyrsa --batch --req-cn=serviceaccount gen-req serviceaccount nopass
+      ./easyrsa --batch sign-req both serviceaccount
+    }
+    {% for group in groups | difference(['config', 'all', 'ungrouped']) %}
+    {% for host in groups[group] %}
+      {% set token = hostvars[host].token | default(host) %}
+      [ -e {{cluster}}/issued/{{host}}.crt ] && [ -e {{cluster}}/private/{{host}}.key ] || {
+        ./easyrsa --batch --req-cn={{host}} gen-req {{host}} nopass
+        {% if group == 'manager' %}
+        ./easyrsa --batch --subject-alt-name=IP:127.0.0.1,IP:{{service_net | ipaddr('1') | ipaddr('address')}},DNS:{{host}},DNS:{{host}}.{{cluster}}.{{domain}},DNS:kubernetes.default.svc,DNS:kubernetes.default.svc.cluster.local sign-req both {{host}}
+        {% else %}
+        ./easyrsa --batch --subject-alt-name=IP:127.0.0.1,IP:{{service_net | ipaddr('1') | ipaddr('address')}},DNS:{{host}},DNS:{{host}}.{{cluster}}.{{domain}} sign-req both {{host}}
+        {% endif %}
+      }
+    {% endfor %}
+    {% endfor %}
+- include_tasks: kind.yml
+  loop_control:
+    loop_var: kind
+  with_items: "{{groups | difference(['config', 'all', 'ungrouped'])}}"
+- name: Transpile configs
+  shell: |
+    for v in {{config_root}}/nodes/*.yml; do
+      {{config_root}}/bins/ct < $v > ${v%.yml}.ign
+    done

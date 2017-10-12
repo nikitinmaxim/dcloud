@@ -1,0 +1,40 @@
+# DOCS http://codecentric.github.io/spring-boot-admin/1.5.0/#_hystrix_ui_module
+security:
+  user:
+    name: admin
+    password: admin@123
+
+info:
+  version: 1.5.0
+  description: подсистема "Администрирования и управления"
+
+server:
+  context-path:
+  port: 80
+  ssl:
+    enabled: false
+  session:
+    cookie:
+      name: JSESSIONIDADMINSRV
+  use-forward-headers: true
+
+eureka:
+  instance:
+      prefer-ip-address: false
+
+management:
+  port: ${server.port}
+  security.enabled: false
+  context-path: /manage
+  health:
+    redis.enabled: false
+
+spring:
+  boot:
+    admin:
+      turbine:
+        clusters: ORDER,CUSTOMER,CATALOG
+        enabled: true
+      context-path: /admin
+      routes:
+        endpoints: env,metrics,trace,dump,jolokia,info,configprops,trace,logfile,refresh,flyway,liquibase,heapdump,loggers,auditevents,hystrix.stream

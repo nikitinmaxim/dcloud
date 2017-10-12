@@ -1,0 +1,42 @@
+user.json
+[
+  {
+    "error": false,
+    "data": {
+      "username": "admin",
+      "password": "0000"
+    }
+  },
+  {
+    "error": true,
+    "data": null
+  }
+]
+
+login.json
+[
+  {
+    "error": false,
+    "message": "Пароль верный",
+    "data": "ok"
+  },
+  {
+    "error": true,
+    "message": "Пароль неверный",
+    "data": null
+  }
+]
+
+logout.json
+[
+  {
+    "error": false,
+    "message": "Вы вышли из аккаунта",
+    "data": "ok"
+  },
+  {
+    "error": true,
+    "message": "Вы не вышли из аккаунта",
+    "data": null
+  }
+]

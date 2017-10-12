@@ -1,0 +1,14 @@
+info:
+  version: 1.0.0
+  description: подсистема "Реестр сервисов"
+
+server:
+  context-path:
+  port: 80
+
+eureka:
+  instance:
+    preferIpAddress: true
+  client:
+    registerWithEureka: false
+    fetchRegistry: false

@@ -1,0 +1,118 @@
+//@import "../scss/_grid";
+@import "../scss/grid";
+@import "../../node_modules/bootstrap/scss/variables";
+@import "../../node_modules/bootstrap/scss/mixins";
+@import "../../node_modules/bootstrap/scss/list-group";
+@import "../scss/colors";
+@import "../scss/buttons";
+
+.orders-details {
+  &__btn {
+    @include btn-outline-primary();
+  }
+}
+
+.list-order-items {
+  margin-bottom: 1.5rem;
+}
+
+.list-order-items .row,
+.list-group--selected-items .row {
+  width: 100%;
+}
+.col {
+  &--customer-label {
+    @include make-col-ready();
+    @include break(xl){
+      @include make-col(2);
+    }
+    @include break(lg){
+      @include make-col(2);
+    }
+    @include break(md){
+      @include make-col(3);
+    }
+    @include break(sm){
+      @include make-col(12);
+    }
+    @include break(xs){
+      @include make-col(12);
+    }
+  }
+  &--customer-select {
+    @include make-col-ready();
+    @include break(xl){
+      @include make-col(10);
+    }
+    @include break(lg){
+      @include make-col(10);
+    }
+    @include break(md){
+      @include make-col(9);
+    }
+    @include break(sm){
+      @include make-col(12);
+    }
+    @include break(xs){
+      @include make-col(12);
+    }
+  }
+  &--customer-comment-label {
+    @include make-col-ready();
+    @include break(xl){
+      @include make-col(2);
+    }
+    @include break(lg){
+      @include make-col(2);
+    }
+    @include break(md){
+      @include make-col(3);
+    }
+    @include break(sm){
+      @include make-col(12);
+    }
+    @include break(xs){
+      @include make-col(12);
+    }
+  }
+  &--customer-comment-textarea {
+    @include make-col-ready();
+    @include break(xl){
+      @include make-col(10);
+    }
+    @include break(lg){
+      @include make-col(10);
+    }
+    @include break(md){
+      @include make-col(9);
+    }
+    @include break(sm){
+      @include make-col(12);
+    }
+    @include break(xs){
+      @include make-col(12);
+    }
+  }
+  &--order-items {
+    @include make-col-ready();
+    @include break(xl){
+      @include make-col(4);
+    }
+    @include break(lg){
+      @include make-col(4);
+    }
+    @include break(md){
+      @include make-col(4);
+    }
+    @include break(sm){
+      @include make-col(12);
+    }
+    @include break(xs){
+      @include make-col(12);
+    }
+    &:last-child {
+      text-align: right;
+    }
+  }
+}
+

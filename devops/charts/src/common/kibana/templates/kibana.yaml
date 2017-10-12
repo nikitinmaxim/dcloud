@@ -1,0 +1,94 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kibana-config
+
+data:
+  kibana.yml: |
+    ## server.basePath: /
+    server.name: kibana
+    server.host: "0"
+    elasticsearch.url: http://elasticsearch:9200
+    elasticsearch.username: elastic
+    elasticsearch.password: changeme
+    xpack.monitoring.ui.container.elasticsearch.enabled: true
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{.Values.name}}
+
+  labels:
+    app: {{.Values.name}}
+    kubernetes.io/cluster-service: "true"
+    kubernetes.io/name: "Kibana"
+spec:
+  type: ClusterIP
+  selector:
+    component: {{.Values.component}}
+  ports:
+    - name: http
+      port: {{.Values.httpPort}}
+      protocol: TCP
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{.Values.name}}
+
+spec:
+  replicas: {{.Values.replicas}}
+  template:
+    metadata:
+      labels:
+        component: {{.Values.component}}
+    spec:
+      volumes:
+      - name: kibana-config
+        configMap:
+          name: kibana-config
+          items:
+          - key: kibana.yml
+            path: kibana.yml
+      containers:
+      - name: {{.Values.container_name}}
+        image: "{{ .Values.global.repository }}/kibana:{{ .Values.global.imageTag }}"
+        imagePullPolicy: Always
+        volumeMounts:
+          - name: kibana-config
+            mountPath: /usr/share/kibana/config
+        env:
+          - name: XPACK_SECURITY_ENABLED
+            value: "false"
+          - name: XPACK_MONITORING_ENABLED
+            value: "false"
+          - name: KIBANA_BASEPATH
+            value: /
+          - name: "{{.Values.env_name}}"
+            value: "{{.Values.env_value}}"
+        ports:
+        - containerPort: {{.Values.container_port}}
+          name: ui
+          protocol: TCP
+      tolerations:
+{{ toYaml .Values.global.tolerations | indent 9 }}
+      {{- if .Values.scheduling.affinity }}
+      {{- if .Values.scheduling.affinity.node }}
+      {{- if .Values.scheduling.affinity.node.labels }}
+      affinity:
+        nodeAffinity:
+          {{ .Values.scheduling.affinity.node.type }}:
+            nodeSelectorTerms:
+            - matchExpressions:
+                {{- range .Values.scheduling.affinity.node.labels }}
+                - key: {{ .key }}
+                  operator: {{ .operator }}
+                  values:
+                  {{- range .values }}
+                  - {{ . }}
+                  {{- end }}
+                {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- end }}

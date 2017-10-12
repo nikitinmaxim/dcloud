@@ -1,0 +1,71 @@
+dependencies:
+  - name: rabbitmq
+    repository: alias:commonRepo
+    version: 0.1.1
+    tags:
+      - rabbitmq
+  - name: prometheus
+    repository: alias:commonRepo
+    version: 0.1.1
+    tags:
+     - metrics
+  - name: grafana
+    repository: alias:commonRepo
+    version: 0.1.1
+    tags:
+     - metrics
+  - name: elasticsearch
+    repository: alias:commonRepo
+    version: 0.1.1
+    tags:
+     - monitoring
+  - name: fluentd
+    repository: alias:commonRepo
+    version: 0.1.1
+    tags:
+     - monitoring
+  - name: kibana
+    repository: alias:commonRepo
+    version: 0.1.1
+    tags:
+     - monitoring
+  - name: eventrouter
+    repository: alias:commonRepo
+    version: 0.1.1
+    tags:
+     - monitoring
+  - name: admin
+    repository: alias:commonRepo
+    version: 0.1.1
+    tags:
+     - admin
+  - name: auth
+    repository: alias:commonRepo
+    version: 0.1.1
+    tags:
+     - auth
+  - name: config-platform
+    repository: alias:commonRepo
+    version: 0.1.1
+    tags:
+     - config
+  - name: discovery
+    repository: alias:commonRepo
+    version: 0.1.1
+    tags:
+     - discovery
+  - name: gateway
+    repository: alias:commonRepo
+    version: 0.1.1
+    tags:
+     - gateway
+  - name: turbine
+    repository: alias:commonRepo
+    version: 0.1.1
+    tags:
+     - turbine
+  - name: zipkin
+    repository: alias:commonRepo
+    version: 0.1.1
+    tags:
+     - zipkin

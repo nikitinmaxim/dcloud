@@ -1,0 +1,59 @@
+{{- if not .Values.global.skipStorage -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: heketi-topology
+  namespace: storage
+data:
+  heketi.json: |
+    {
+      "port": "8080",
+      "backup_db_to_kube_secret": true,
+      "glusterfs": {
+        "brick_min_size_gb": 1,
+        "brick_max_size_gb": 1024,
+        "db": "/var/lib/heketi/heketi.db",
+        "executor": "kubernetes",
+        "kubeexec": {
+          "insecure": false,
+          "namespace": "storage",
+          "use_secrets": true,
+          "token_file": "/var/run/secrets/kubernetes.io/serviceaccount/token",
+          "namespace_file": "/var/run/secrets/kubernetes.io/serviceaccount/namespace",
+          "use_pod_names": true,
+          "fstab": "/var/lib/heketi/fstab"
+        }
+      }
+    }
+  topology.json: |
+    {
+      "clusters": [
+        {
+          "nodes": [
+            {{- range $index, $node := .Values.global.storage.nodes }}
+            {{- if gt $index 0 }}
+            ,
+            {{- end }}
+            {
+              "node": {
+                "hostnames": {
+                  "manage": [
+                    "{{default $node.host $node.name}}-storage"
+                  ],
+                  "storage": [
+                    "{{$node.host}}"
+                  ]
+                },
+                "zone": {{default 1 $node.zone}}
+              },
+              "devices": [
+                "{{default "/dev/sdb" $node.device}}"
+              ]
+            }
+            {{- end }}
+          ]
+        }
+      ]
+    }
+
+{{- end -}}

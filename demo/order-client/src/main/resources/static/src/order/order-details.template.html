@@ -1,0 +1,57 @@
+<div class="orders-details-header">
+    <div class="row">
+        <div class="col orders-details-header__title-block">
+            <h2 ng-bind="$ctrl.title"></h2>
+        </div>
+        <div class="col orders-details-header__btn-block">
+            <a class="btn orders-details-header__btn" href="/#!/orders/list" role="button">К списку заказов</a>
+        </div>
+    </div>
+</div>
+
+<div>
+    <form  name="orderNew" id="orderNew">
+        <div class="form-group">
+            <div class="row">
+                <div class="col col--customer-label">
+                    <label for="customerSelect">Заказчик</label>
+                </div>
+                <div class="col col--customer-select">
+                    <span ng-if="!$ctrl.editMode">{{$ctrl.customerName}}</span>
+
+                    <select ng-if="$ctrl.editMode" class="form-control" id="customerSelect" ng-model="$ctrl.selectedCustomer">
+                        <option ng-repeat="customer in $ctrl.customers" value="{{customer.id}}">{{customer.name}}&nbsp;&nbsp;<{{customer.email}}></option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <ul class="list-group list-order-items">
+            <li class="list-group-item list-order-items__element" ng-repeat="item in $ctrl.catalog track by $index">
+                <div class="row">
+                    <div class="col col--order-items">
+                        <span ng-bind="item.name"></span>
+                    </div>
+                    <div class="col col--order-items" style="text-align: right;">
+                        $<span ng-bind="item.price"></span>
+                    </div>
+                    <div class="col col--order-items">
+                        <button ng-if="$ctrl.editMode" type="button" class="btn btn-secondary btn-sm" ng-click="$ctrl.selectedItemsMinus(item)" ng-class="item.count ? 'btn-success' : ''"> - </button>
+                        <span ng-bind="item.count"></span>
+                        <button ng-if="$ctrl.editMode" type="button" class="btn btn-secondary btn-sm" ng-click="$ctrl.selectedItemsPlus(item)" ng-class="item.count ? 'btn-success' : ''"> + </button>
+                    </div>
+                </div>
+            </li>
+        </ul>
+        <div class="form-group">
+            <div class="row">
+                <div class="col col--customer-label">
+                    <label for="customerSelect">Стоимость заказа</label>
+                </div>
+                <div class="col col--customer-select">
+                    <span>${{$ctrl.totalPrice}}</span>
+                </div>
+            </div>
+        </div>
+        <button ng-if="$ctrl.editMode" type="submit" class="btn btn-primary" ng-click="$ctrl.saveOrder()" form="orderNew">Сохранить заказ</button>
+    </form>
+</div>

@@ -1,0 +1,18 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: kube-dns
+  namespace: manager
+spec:
+  clusterIP: {{ .Values.global.dns.internal }}
+  selector:
+    name: kube-dns
+  ports:
+    - name: dns
+      protocol: UDP
+      port: 53
+      targetPort: 54
+    - name: dns-tcp
+      protocol: TCP
+      port: 53
+      targetPort: 54

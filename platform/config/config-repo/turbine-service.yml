@@ -1,0 +1,17 @@
+info:
+  version: 1.5.0
+  description: подсистема мониторинга
+
+server:
+  context-path:
+  port: 80
+
+eureka:
+  instance:
+      prefer-ip-address: false
+
+turbine:
+  aggregator:
+  appConfig: order,customer,catalog
+  clusterNameExpression: new String('default')
+  instanceUrlSuffix: /manage/hystrix.stream

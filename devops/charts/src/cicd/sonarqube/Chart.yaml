@@ -1,0 +1,14 @@
+name: sonarqube
+version: 0.1.1
+description: SonarQube is an open platform to manage code quality.
+keywords:
+  - Code quality
+  - Per project
+  - java
+  - php
+  - python
+  - c/c++
+home: http://www.sonarqube.org/
+sources:
+  - https://github.com/SonarSource/docker-sonarqube
+engine: gotpl

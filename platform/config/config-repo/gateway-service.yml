@@ -1,0 +1,80 @@
+info:
+  version: 1.0.0
+  description: подсистема "Маршрутизации вызовов"
+
+server:
+  context-path:
+  port: 80
+  ssl:
+    enabled: false
+  session:
+    cookie:
+      name: JSESSIONIDAPISRV
+  use-forward-headers: true
+
+eureka:
+  instance:
+      prefer-ip-address: false
+
+zuul:
+  add-proxy-headers: true
+  ignored-services: '*'
+  host:
+    connect-timeout-millis: 20000
+    socket-timeout-millis: 20000
+  routes:
+    catalog:
+      serviceId: catalog
+      path: /catalog/**
+      stripPrefix: false
+      sensitiveHeaders:
+      ribbon:
+        ReadTimeout: 15000
+    customer:
+      serviceId: customer
+      path: /customer/**
+      stripPrefix: false
+      sensitiveHeaders:
+      ribbon:
+        ReadTimeout: 15000
+    order:
+      serviceId: order
+      path: /order/**
+      stripPrefix: false
+      sensitiveHeaders:
+      ribbon:
+        ReadTimeout: 15000
+    auth:
+      serviceId: auth-service
+      path: /auth/**
+      stripPrefix: false
+      sensitiveHeaders:
+      ribbon:
+        ReadTimeout: 15000
+
+ribbon:
+  eager-load:
+    enabled: true
+    clients:
+      - catalog
+      - customer
+      - order
+      - auth
+
+hystrix:
+  command:
+    default:
+      execution:
+        isolation:
+          thread:
+            timeoutInMilliseconds: 15000
+
+management:
+  port: ${server.port}
+  security.enabled: false
+  context-path: /manage
+
+security:
+  basic:
+    enabled: false
+  ignored: ${management.context-path},${management.context-path}/**

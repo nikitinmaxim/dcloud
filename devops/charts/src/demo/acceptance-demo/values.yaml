@@ -1,0 +1,7 @@
+runTests: true
+imagePullPolicy: Never
+restartPolicy: Never
+authTokenUrl: http://auth-service.platform.svc.cluster.local/auth/oauth/token
+orderListUrl: http://order/order/api/
+catalogListUrl: http://catalog/catalog/api/
+customerListUrl: http://customer/customer/api/

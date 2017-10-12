@@ -1,0 +1,30 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+      - name: {{ template "fullname" . }}
+        image: "{{ .Values.global.gitlab.repository }}/gitlab-api:{{ .Values.global.gitlab.imageTag }}"
+        env:
+{{ include "proxyenv" . | indent 8 }}
+        command:
+          - /jsonget
+          - -listen={{ .Values.global.gitlab.buildbotListen | default ":8080" }}
+          - -gitlab=http://gitlab.{{ .Release.Namespace }}.svc.cluster.local/api/v4
+          - -token={{ .Values.global.gitlab.buildbotToken }}
+          - -advance-refs={{ .Values.global.gitlab.buildbotBranches | default "master,testing" }}
+        ports:
+          - name: webhook
+            containerPort: {{ .Values.global.gitlab.buildbotListen | default "8080" }}

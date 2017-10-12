@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: registry-storage
+  annotations:
+    volume.beta.kubernetes.io/storage-class: {{ .Values.global.storage.class | quote }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.global.internalRegistryVolume | default "10G" }}

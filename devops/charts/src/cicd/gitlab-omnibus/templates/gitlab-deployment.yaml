@@ -1,0 +1,172 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: gitlab
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        name: {{ template "fullname" . }}
+    spec:
+      containers:
+      - name: gitlab
+        image: "{{ .Values.global.gitlab.repository }}/gitlab-ce:{{ .Values.global.gitlab.imageTag }}"
+        command: ["/assets/wrapper"]
+        env:
+{{ include "proxyenv" . | indent 8 }}
+        - name: REDIS_HOST
+          value: {{ template "gitlab.redis.fullname" . }}
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "fullname" . }}-secrets
+              key: redis-password
+        - name: GITLAB_EXTERNAL_SCHEME
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "fullname" . }}-config
+              key: external_scheme
+        - name: GITLAB_EXTERNAL_HOSTNAME
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "fullname" . }}-config
+              key: external_hostname
+        - name: GITLAB_REGISTRY_EXTERNAL_SCHEME
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "fullname" . }}-config
+              key: registry_external_scheme
+        - name: GITLAB_REGISTRY_EXTERNAL_HOSTNAME
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "fullname" . }}-config
+              key: registry_external_hostname
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "fullname" . }}-secrets
+              key: db-user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "fullname" . }}-secrets
+              key: db-password
+        - name: POSTGRES_DB
+          valueFrom:
+            configMapKeyRef:
+              name: {{ template "fullname" . }}-config
+              key: postgres_db
+        {{- if .Values.gitlabEELicense }}
+        - name: GITLAB_EE_LICENSE
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "fullname" . }}-secrets
+              key: gitlab_ee_license
+        {{- end }}
+        - name: GITLAB_OMNIBUS_CONFIG
+          value: |
+            external_url "#{ENV['GITLAB_EXTERNAL_SCHEME']}://#{ENV['GITLAB_EXTERNAL_HOSTNAME']}"
+            registry_external_url "#{ENV['GITLAB_REGISTRY_EXTERNAL_SCHEME']}://#{ENV['GITLAB_REGISTRY_EXTERNAL_HOSTNAME']}"
+
+            nginx['enable'] = false
+            registry_nginx['enable'] = false
+            mattermost_nginx['enable'] = false
+
+            gitlab_workhorse['listen_network'] = 'tcp'
+            gitlab_workhorse['listen_addr'] = '0.0.0.0:8005'
+
+            registry['registry_http_addr'] = '0.0.0.0:8105'
+
+            postgresql['enable'] = false
+            gitlab_rails['db_host'] = '{{ template "gitlab.postgresql.fullname" . }}'
+            gitlab_rails['db_password'] = ENV['POSTGRES_PASSWORD']
+            gitlab_rails['db_username'] = ENV['POSTGRES_USER']
+            gitlab_rails['db_database'] = ENV['POSTGRES_DB']
+            gitlab_rails['gitlab_https'] = false
+
+            redis['enable'] = false
+            gitlab_rails['redis_host'] = '{{ template "gitlab.redis.fullname" . }}'
+
+            manage_accounts['enable'] = true
+            manage_storage_directories['manage_etc'] = false
+
+            gitlab_shell['gitlab_url'] = "#{ENV['GITLAB_EXTERNAL_SCHEME']}://#{ENV['GITLAB_EXTERNAL_HOSTNAME']}"
+            gitlab_shell['auth_file'] = '/gitlab-data/ssh/authorized_keys'
+            git_data_dirs({
+              "default": {
+                "path": "/gitlab-data/git-data"
+              }
+            })
+            gitlab_rails['shared_path'] = '/gitlab-data/shared'
+            gitlab_rails['uploads_directory'] = '/gitlab-data/uploads'
+            gitlab_ci['builds_directory'] = '/gitlab-data/builds'
+            gitlab_rails['registry_path'] = '/gitlab-registry'
+            gitlab_rails['trusted_proxies'] = ["10.0.0.0/8","172.16.0.0/12","192.168.0.0/16"]
+
+            prometheus['listen_address'] = '0.0.0.0:9090'
+            postgres_exporter['enable'] = true
+            postgres_exporter['env'] = {
+              'DATA_SOURCE_NAME' => "user=#{ENV['POSTGRES_USER']} host={{ template "gitlab.postgresql.fullname" . }} port=5432 dbname=#{ENV['POSTGRES_DB']} password=#{ENV['POSTGRES_PASSWORD']} sslmode=disable"
+            }
+            redis_exporter['enable'] = true
+            redis_exporter['flags'] = {
+              'redis.addr' => "{{ template "gitlab.redis.fullname" . }}:6379",
+            }
+        - name: GITLAB_POST_RECONFIGURE_CODE
+          value: |
+            include Gitlab::CurrentSettings
+
+            KubernetesService.where(template: true).first_or_create(
+              active: true,
+              api_url: "https://#{ENV["KUBERNETES_SERVICE_HOST"]}:#{ENV["KUBERNETES_SERVICE_PORT"]}",
+              token: File.read("/var/run/secrets/kubernetes.io/serviceaccount/token"),
+              ca_pem: File.read("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"))
+
+            current_application_settings.update_attribute(:health_check_access_token, '{{.Values.healthCheckToken}}')
+
+            {{- if .Values.gitlabEELicense }}
+            License.first_or_create(data: "#{ENV["GITLAB_EE_LICENSE"]}")
+            {{- end }}
+        - name: GITLAB_POST_RECONFIGURE_SCRIPT
+          value: |
+            /opt/gitlab/bin/gitlab-rails runner -e production "$GITLAB_POST_RECONFIGURE_CODE"
+        ports:
+        - name: registry
+          containerPort: 8105
+        - name: workhorse
+          containerPort: 8005
+        - name: ssh
+          containerPort: 22
+        - name: prometheus
+          containerPort: 9090
+        volumeMounts:
+        - name: config
+          mountPath: /etc/gitlab
+        - name: data
+          mountPath: /gitlab-data
+          subPath: gitlab-data
+        - name: registry
+          mountPath: /gitlab-registry
+        readinessProbe:
+          httpGet:
+            path: /health_check?token={{.Values.healthCheckToken}}
+            port: 8005
+          initialDelaySeconds: 15
+          timeoutSeconds: 1
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{ template "fullname" . }}-storage
+      - name: registry
+        persistentVolumeClaim:
+          claimName: {{ template "fullname" . }}-registry-storage
+      - name: config
+        persistentVolumeClaim:
+          claimName: {{ template "fullname" . }}-config-storage

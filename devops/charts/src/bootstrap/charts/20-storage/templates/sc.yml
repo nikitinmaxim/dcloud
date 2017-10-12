@@ -1,0 +1,17 @@
+{{- if not .Values.global.skipStorage -}}
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .Values.global.storage.class }}
+  namespace: storage
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: kubernetes.io/glusterfs
+parameters:
+  resturl: "http://heketi.storage.svc.cluster.local:8080"
+{{ if (gt (int64 .Values.global.storage.replicate) 1) }}
+  volumetype: "replicate:{{ .Values.global.storage.replicate }}"
+{{ else }}
+  volumetype: "none"
+{{ end }}
+{{- end -}}

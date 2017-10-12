@@ -1,0 +1,18 @@
+spring:
+  data:
+    rest:
+      basePath: /api
+  sleuth:
+    enabled: false
+    stream:
+      enabled: false
+
+  cloud:
+    config:
+      enabled: false
+      uri:
+      #profile: production
+      #label: master
+      discovery:
+              enabled: false
+              service-id: config-demo-service

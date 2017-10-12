@@ -1,0 +1,39 @@
+- name: Make directory layout
+  file:
+    path: "{{config_root}}/{{item}}"
+    state: directory
+  with_items:
+    - nodes
+    - certs
+    - dists
+    - bins
+- name: Protect certs
+  file:
+    path: "{{config_root}}/certs"
+    mode: 0700
+- name: Obtain externals
+  shell: |
+    curl -L http://github.com/OpenVPN/easy-rsa/releases/download/3.0.1/EasyRSA-3.0.1.tgz > "{{config_root}}/dists/easyrsa.tar.gz"
+    curl -L http://github.com/coreos/container-linux-config-transpiler/releases/download/v0.4.1/ct-v0.4.1-x86_64-unknown-linux-gnu > "{{config_root}}/bins/ct"
+    chmod +x "{{config_root}}/bins/ct"   
+- name: Unpack EasyRSA
+  unarchive:
+    remote_src: true
+    src: "{{config_root}}/dists/easyrsa.tar.gz"
+    dest: "{{config_root}}/certs"
+    extra_opts:
+      - "--strip=1"
+      - "--wildcards"
+      - "*/openssl-1.0.cnf"
+      - "--wildcards"
+      - "*/x509-types"
+      - "--wildcards"
+      - "*/easyrsa"
+- name: Place "both" x509-type
+  copy:
+    src: files/both
+    dest: "{{config_root}}/certs/x509-types/both"
+- name: Init ssh authorized keys
+  shell: |
+    cp ~/.ssh/authorized_keys {{config_root}}/nodes/authorized_keys
+    chmod 644 {{config_root}}/nodes/authorized_keys

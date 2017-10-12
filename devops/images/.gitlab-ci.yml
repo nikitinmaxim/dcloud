@@ -1,0 +1,23 @@
+image: alpine:3.6
+
+stages:
+  - package
+
+package:
+  only: 
+    - master
+    - testing
+  stage: package
+  services:
+    - name: docker:dind
+  script: |
+    apk --no-cache add git docker
+    changes="$(git diff HEAD~1 --diff-filter=MARC --numstat | awk '/\//{print $3}' | sed 's|/.*||g' | sort -u)"
+    echo "Changed: $changes"
+    for image in $changes; do
+      [ -f "$image/Dockerfile" ] || continue
+      tag="$CI_REGISTRY/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME/$image:$CI_BUILD_REF_NAME"
+      docker -H 127.0.0.1 build --build-arg HTTP_PROXY=$HTTP_PROXY --build-arg HTTPS_PROXY=$HTTPS_PROXY --build-arg NO_PROXY=$NO_PROXY -t "$tag" "$image"
+      docker -H 127.0.0.1 login -u "$CI_REGISTRY_USER" -p "$CI_JOB_TOKEN" "$CI_REGISTRY"
+      docker -H 127.0.0.1 push "$tag"
+    done

@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: runner-scripts
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+data:
+  entrypoint: |
+    #!/bin/bash
+    set -x
+    
+    # Register the runner
+    if [ $(wc -c /config/runner-config | awk '{print $1}') -eq 0 ]; then
+      /entrypoint register --non-interactive \
+        --url http://gitlab.{{ .Release.Namespace }}.svc.cluster.local \
+        --registration-token {{ .Values.global.gitlab.runnerToken }} \
+        --executor kubernetes \
+        --request-concurrency {{ .Values.global.gitlab.runnerConcurrent | default .Values.concurrent }} \
+        --kubernetes-image {{ .Values.global.gitlab.runnerImage | default .Values.runners.image }} \
+        --kubernetes-privileged true \
+        --kubernetes-pull-policy if-not-present
+
+    cat <<EOF >> /etc/gitlab-runner/config.toml
+        [[runners.kubernetes.volumes.host_path]]
+          name = "hostpath-0"
+          mount_path = "/etc/ssl/certs/ca-certificates.crt"
+          read_only = true
+          host_path = "/etc/ssl/certs/ca-certificates.crt"
+        [[runners.kubernetes.volumes.secret]]
+          name = "runner-secrets"
+          mount_path = "/secret"
+          read_only = true
+    EOF
+
+      sed 's/^concurrent = 1$/concurrent = {{ .Values.global.gitlab.runnerConcurrent | default .Values.concurrent }}/g' -i /etc/gitlab-runner/config.toml
+      ls -l /var/run/secrets/kubernetes.io/serviceaccount
+      token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+      curl -H "Authorization: Bearer $token" -k -v https://kubernetes.default.svc.cluster.local/api/v1/namespaces/{{ .Release.Namespace }}/secrets/runner-config | sed "s|\"runner-config\": .*|\"runner-config\": \"$(base64 < /etc/gitlab-runner/config.toml | tr -d '\n')\"|" | curl -H "Authorization: Bearer $token" -k -v -XPUT -H "Content-Type: application/json" "https://kubernetes.default.svc.cluster.local/api/v1/namespaces/{{ .Release.Namespace }}/secrets/runner-config" -d "@-"
+
+    else
+      cp /config/runner-config /etc/gitlab-runner/config.toml
+    fi
+
+    [ $(wc -c /secrets/id_rsa | awk '{print $1}') -eq 0 ] && {
+      ssh-keygen -N "" -t rsa -f /tmp/id_rsa
+      curl -H "Authorization: Bearer $token" -k -v https://kubernetes.default.svc.cluster.local/api/v1/namespaces/{{ .Release.Namespace }}/secrets/runner-secrets | sed "s|\"id_rsa\": null|\"id_rsa\": \"$(base64 < /tmp/id_rsa | tr -d '\n')\"|" | curl -H "Authorization: Bearer $token" -k -v -XPUT -H "Content-Type: application/json" "https://kubernetes.default.svc.cluster.local/api/v1/namespaces/{{ .Release.Namespace }}/secrets/runner-secrets" -d "@-"
+    }
+
+    /entrypoint run

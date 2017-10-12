@@ -1,0 +1,15 @@
+description: GitLab Runner
+keywords:
+- git
+- ci
+- deploy
+maintainers:
+- email: support@gitlab.com
+  name: GitLab Inc.
+- email: dj@gitlab.com
+  name: DJ Mountney
+name: gitlab-runner
+sources:
+- https://hub.docker.com/r/gitlab/gitlab-runner/
+- https://docs.gitlab.com/runner/
+version: 0.1.10

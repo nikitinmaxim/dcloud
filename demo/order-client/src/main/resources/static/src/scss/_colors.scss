@@ -1,0 +1,39 @@
+// Colors
+$white: #fff;
+$black: #000;
+$red: #d9534f;
+$orange: #f0ad4e;
+$yellow: #ffd500;
+$green: #5cb85c;
+$blue: #0275d8;
+$teal: #5bc0de;
+$pink: #ff5b77;
+$purple: #613d7c;
+
+$gray-dark: #292b2c;
+$gray: #464a4c;
+$gray-light: #636c72;
+$gray-lighter: #eceeef;
+$gray-lightest: #f7f7f9;
+
+$bd-purple: #563d7c;
+$bd-purple-bright: lighten(saturate($bd-purple, 5%), 15%);
+$bd-purple-light: #cdbfe3;
+$bd-purple-lightest: #f5f2f9;
+$bd-graphite: #2a2730;
+$bd-graphite-light: lighten($bd-graphite, 40%);
+$bd-yellow: #ffe484;
+$bd-danger: #d9534f;
+$bd-warning: #f0ad4e;
+$bd-info: #5bc0de;
+$bd-blue: #0275d8;
+
+@mixin text-muted() {
+  color: $gray-light;
+}
+
+@mixin table-bg($color) {
+  color: $white;
+  background-color: $color;
+  border-color: $color;
+}

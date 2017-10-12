@@ -1,0 +1,29 @@
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: ingress-default-backend
+  namespace: balancer
+spec:
+  selector:
+    matchLabels:
+      name: ingress-default-backend
+  template:
+    metadata:
+      name: ingress-default-backend
+      labels:
+        name: ingress-default-backend
+    spec:
+      containers:
+        - name: ingress-default-backend
+          image: {{ .Values.global.repository }}/default-backend:{{ .Values.global.imageTag }}
+          ports:
+            - name: http
+              containerPort: 8080
+      serviceAccount: ingress-service-account
+      restartPolicy: Always
+      dnsPolicy: ClusterFirstWithHostNet
+      tolerations:
+        - key: "dedicated"
+          value: "kube-balancer"
+      nodeSelector:
+        role: balancer

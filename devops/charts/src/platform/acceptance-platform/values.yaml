@@ -1,0 +1,5 @@
+runTests: true
+imagePullPolicy: Never
+restartPolicy: Never
+authTokenUrl: http://auth-service/auth/oauth/token
+adminAppsUrl: http://admin-service/api/applications

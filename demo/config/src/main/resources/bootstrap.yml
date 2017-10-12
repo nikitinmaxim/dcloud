@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: config-demo-service
+  cloud:
+#    inetutils:
+#      preferred-networks:
+#        - 10.0
+#      ignored-interfaces:
+#        - eth2
+#        - eth2@*
+    config:
+      server:
+#        git:
+#          uri: http://gitlab.zotona.com/dclou/demo/config.git
+#          search-paths: config-repo
+        native:
+          search-locations: classpath:config-repo/
+  rabbitmq:
+    addresses: platform-rabbitmq.platform.svc.cluster.local
+    username: guest
+    password: guest
+  profiles:
+     active: native

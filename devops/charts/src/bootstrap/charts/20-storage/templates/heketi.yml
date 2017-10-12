@@ -1,0 +1,71 @@
+{{- if not .Values.global.skipStorage -}}
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: heketi
+  namespace: storage
+spec:
+  selector:
+    matchLabels:
+      name: heketi
+  replicas: 1
+  template:
+    metadata:
+      name: heketi
+      labels:
+        name: heketi
+    spec:
+      volumes:
+        - name: lib
+          hostPath:
+            path: /lib
+        - name: var-lib-heketi
+          hostPath:
+            path: /data/persistent/heketi
+        - name: heketi-topology
+          configMap:
+            name: heketi-topology
+        - name: heketi-db-secret
+          secret:
+            secretName: heketi-db-backup
+      serviceAccountName: heketi-service-account
+      initContainers:
+        - name: dm-pool
+          image: {{ .Values.global.repository }}/busybox:{{ .Values.global.imageTag }}
+          command:
+            - sh
+            - -c
+            - modprobe dm-thin-pool
+          volumeMounts:
+            - name: lib
+              mountPath: "/lib"
+          securityContext:
+            privileged: true
+      containers:
+        - name: heketi
+          image: {{ .Values.global.repository }}/heketi:{{ .Values.global.imageTag }}
+          ports:
+            - name: heketi
+              containerPort: 8080
+          volumeMounts:
+            - name: var-lib-heketi
+              mountPath: "/var/lib/heketi"
+            - name: heketi-topology
+              mountPath: /conf
+            - name: heketi-db-secret
+              mountPath: /backupdb
+          command:
+            - /bin/sh
+            - -c
+            - >
+              [ -f /backupdb/heketi.db.gz ] && gunzip -c /backupdb/heketi.db.gz > /var/lib/heketi/heketi.db || 
+              [ -f /backupdb/heketi.db ] && cp /backupdb/heketi.db /var/lib/heketi/heketi.db; 
+              awk 'BEGIN{s=0};/"storage"/{s=1; print $0; next};/]/{s=0};{if (s) { p1=index($0, "\""); p2=index(substr($0, p1+1), "\""); prefix=substr($0,1,p1); infix=substr($0,p1+1,p2-1); suffix=substr($0,p1+p2); printf prefix; system("getent hosts " infix " | tr -d \\\\n | sed \"s/ .*//g\"" ); print suffix; } else { print $0 }}' < /conf/topology.json > /tmp/topology-post.json ; 
+              [ $(wc -c /var/lib/heketi/heketi.db | awk '{print $1}') -eq 0 ] && ( until curl http://127.0.0.1:8080; do sleep 1; done && heketi-cli topology load --json=/tmp/topology-post.json & ); 
+              /usr/bin/heketi --config=/conf/heketi.json
+      tolerations:
+        - key: "dedicated"
+          value: "kube-storage"
+      nodeSelector:
+        role: storage
+{{- end -}}

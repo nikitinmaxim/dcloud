@@ -1,0 +1,11 @@
+- name: processing {{kind}}
+  include_tasks: "host.yml"
+  with_inventory_hostnames:
+    - "{{kind}}"
+  loop_control:
+    loop_var: host
+  vars:
+    token: "{{hostvars[host].token | default(host)}}"
+    labels: "role={{kind}}"
+    taint: "{{hostvars[host].taint}}"
+    taints: "dedicated=kube-{{kind}}:NoSchedule"

@@ -1,0 +1,37 @@
+<div class="orders-list-header">
+    <div class="row">
+        <div class="col orders-list-header__title-block">
+            <h2 ng-bind="$ctrl.title"></h2>
+        </div>
+        <div class="col orders-list-header__btn-block">
+            <a href="#!/order/create" class="btn orders-list-header__btn" role="button">Добавить заказ</a>
+            <button type="submit" class="btn orders-list-header__btn orders-list-header__signout-btn" ng-click="$ctrl.logoutUser()">
+                <!--<img src="dist/img/signout.png" alt="Выйти из аккаунта">-->
+                <i class="fa fa-sign-out" aria-hidden="true"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<table class="orders-list-table orders-list-table--hover">
+    <thead>
+        <tr>
+            <th class=""># заказа</th>
+            <th class="">заказчик</th>
+            <th class="">стоимость</th>
+            <th class=""></th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr ng-repeat="order in $ctrl.orders | filter:$ctrl.ordersListFilter">
+            <td>
+                <a href="#!/order/{{order.id}}" ng-bind="order.id" class="btn"></a>
+            </td>
+            <td class="" ng-bind="$ctrl.getCustomerInfo(order.customerId)"></td>
+            <td class="" ng-bind="$ctrl.getTotalPrice(order)"></td>
+            <td>
+                <button type="button" class="btn btn-secondary btn-sm" ng-click="$ctrl.deleteOrder(order.id)" ng-class="'btn-success'"> X </button>
+            </td>
+        </tr>
+    </tbody>
+</table>

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tcp-ports
+  namespace: balancer
+data:
+{{ toYaml .Values.global.ports | indent 2 }}

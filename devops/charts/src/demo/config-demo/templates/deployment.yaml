@@ -1,0 +1,43 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    app: {{ template "name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "name" . }}
+        release: {{ .Release.Name }}
+    spec:
+      tolerations:
+      containers:
+        - name: {{ .Chart.Name }}
+          env:
+{{ include "proxyenv" . | indent 12 }}
+            - name: JAVA_EXT
+              value: -Djava.security.egd=file:/dev/./urandom -Dspring.profiles.active=native
+            - name: JAVA_MEM
+              value: -Xms250m -Xmx512m -XX:CompressedClassSpaceSize=300m -XX:MinHeapFreeRatio=5 -XX:MaxHeapFreeRatio=10 -XX:-TieredCompilation -Xss256k -XX:+UseG1GC -XX:+UseStringDeduplication
+          image:  "{{ .Values.global.demo.repository }}/config:{{ .Values.global.demo.imageTag }}"
+          ports:
+            - containerPort: 80
+          command:
+            - /bin/sh
+            - -c
+            - until curl -s {{ .Values.global.platform.discoveryService | default "discovery-service.platform.svc.cluster.local" }}; do sleep 1; done && java $JAVA_MEM $JAVA_EXT -jar /app.jar
+          readinessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 600
+            periodSeconds: 60

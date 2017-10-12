@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+    <title>Demo</title>
+    <meta name="description" content=""/>
+    <meta name="viewport" content="width=device-width"/>
+    <base href="/"/>
+</head>
+<body ng-app="app" ng-controller="home as home">
+
+<div class="container" ng-show="!home.authenticated">
+    Username: <input ng-model="home.username">
+    Password: <input ng-model="home.password">
+    <br>
+    <span style="color: red;">{{ home.error }}</span>
+    <div>
+        <button ng-click="home.login()" class="btn btn-primary">LOGIN</button>
+        <a href="/login/code">LOGIN VIA AUTH SERVICE</a>
+    </div>
+</div>
+
+<div class="container" ng-show="home.authenticated">
+    Logged in as: <span ng-bind="home.user"></span>
+
+    <div>
+        <button ng-click="home.logout()" class="btn btn-primary">Logout</button>
+    </div>
+
+    <div>
+        <button ng-click="home.getCatalog()" class="btn btn-primary">GET CATALOG</button>
+    </div>
+    <div>
+        <button ng-click="home.getCustomers()" class="btn btn-primary">GET CUSTOMERS</button>
+    </div>
+    <div>
+        <button ng-click="home.getOrders()" class="btn btn-primary">GET ORDERS</button>
+    </div>
+
+    <br>
+
+    <span style="color: red;">{{ home.apiError }}</span>
+    <span style="color: blue;">{{ home.apiResult }}</span>
+</div>
+
+<script src="node_modules/angular/angular.min.js"></script>
+<script type="text/javascript">
+    angular.module("app", []).controller("home", function($http) {
+        var self = this;
+        self.username = 'user1';
+        self.password = 'password';
+        self.error = '';
+        self.apiResult = '';
+        self.apiError = '';
+
+        self.login = function() {
+            self.apiResult = '';
+            self.apiError = '';
+
+            $http({
+                method: "POST", url: '/login/pass',
+                headers: {username: self.username, password: self.password}
+            }).then (function success(response) {
+                self.getUser();
+            },function error(response) {
+                console.log("Login failed");
+                self.authenticated = false;
+                self.error = response.message;
+            });
+        };
+
+        self.logout = function() {
+            self.apiResult = '';
+            self.apiError = '';
+
+            $http({
+                method: "POST", url: '/logout'
+            }).then (function success(response) {
+                self.authenticated = false;
+                self.user = "N/A";
+                self.error = '';
+            },function error(response) {
+                console.log("Logout failed");
+            });
+        };
+
+        self.getUser = function() {
+            $http({
+                method: "GET", url: "/api/user"
+            }).then (function success(response) {
+                console.log(response);
+
+                self.user = response.data.userAuthentication.details.name;
+                self.userData = response;
+                self.authenticated = true;
+            },function error(response) {
+                self.user = "N/A";
+                self.authenticated = false;
+            });
+        };
+
+        self.getCatalog = function() {
+            $http({
+                method: "GET", url: "/api/catalog"
+            }).then (function success(response) {
+                console.log(response);
+
+                self.apiResult = response.data;
+                self.apiError = '';
+            },function error(response) {
+                console.log('error!!!');
+            });
+        };
+
+        self.getCustomers = function() {
+            $http({
+                method: "GET", url: "/api/customers"
+            }).then (function success(response) {
+                console.log(response);
+
+                self.apiResult = response.data;
+                self.apiError = '';
+            },function error(response) {
+                console.log('error!!!');
+            });
+        };
+
+        self.getOrders = function() {
+            $http({
+                method: "GET", url: "/api/orders"
+            }).then (function success(response) {
+                console.log(response);
+
+                self.apiResult = response.data;
+                self.apiError = '';
+            },function error(response) {
+                console.log('error!!!');
+            });
+        };
+
+        self.getUser();
+    });
+</script>
+</body>
+</html>

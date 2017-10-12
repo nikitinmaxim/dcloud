@@ -1,0 +1,15 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: registry
+  annotations:
+    ingress.kubernetes.io/proxy-body-size: 2G
+spec:
+  rules:
+  - host: internal.{{ .Values.global.ingress.suffix }}
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: docker-registry
+          servicePort: 80

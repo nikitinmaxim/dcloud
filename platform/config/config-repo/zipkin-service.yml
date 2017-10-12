@@ -1,0 +1,54 @@
+#  cloud:
+#    stream:
+#      kafka:
+#        binder:
+#          zkNodes: ${kafka.binder.brokers}
+#          defaultBrokerPort: ${kafka.binder.defaultBrokerPort}
+#          brokers: ${kafka.binder.zkNodes}
+#          defaultZkPort: ${kafka.binder.defaultZkPort}
+#          headers:
+#            - X-B3-TraceId
+#            - X-B3-SpanId
+#            - X-B3-Sampled
+#            - X-B3-ParentSpanId
+#            - X-Span-Name
+#            - X-Process-Id
+# sleuth async messaging
+info:
+  version: 1.0.0
+  description: подсистема "Аудита вызовов микросервисов"
+
+spring:
+  sleuth:
+    enabled: false
+    stream:
+      enabled: false
+    hystrix:
+      strategy:
+        enabled: false
+
+  rabbitmq:
+    addresses: rabbit-mon
+    username: admin
+    password: admin
+    virtual-host: rabbit-mon
+
+zipkin:
+  storage:
+   type: elasticsearch
+   elasticsearch:
+    cluster: elasticsearch
+    hosts: http://elasticsearch:9200
+    index: zipkin
+    index_shards: 5
+    replica: 1
+
+
+# Give the application a PORT default (ignored by PCF, will deploy on 80)
+server:
+  context-path:
+  port: 80
+
+eureka:
+  instance:
+      prefer-ip-address: false

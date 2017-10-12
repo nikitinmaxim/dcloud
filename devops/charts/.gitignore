@@ -1,0 +1,10 @@
+.idea
+*.lock
+*.iml
+*.ipr
+*.iws
+.kube
+*.tgz
+target
+*.secret.yml
+/values-local.yaml

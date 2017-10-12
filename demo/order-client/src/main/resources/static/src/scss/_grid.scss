@@ -1,0 +1,58 @@
+@import "../../node_modules/bootstrap/scss/variables";
+
+$grid-columns: 12;
+$grid-gutter-width-base: 0;
+
+$xs: 480px;
+$sm: 576px;
+$md: 768px;
+$lg: 992px;
+$xl: 1200px;
+
+@mixin break($media) {
+    @if $media==xl {
+        @media only screen and (min-width: $xl) {
+            @content;
+        }
+    }
+    @if $media==lg {
+        @media only screen and (min-width: $lg) and (max-width:$xl - 1) {
+            @content;
+        }
+    }
+    @if $media==md {
+        @media only screen and (min-width: $md) and (max-width:$lg - 1){
+            @content;
+        }
+    }
+    @else if $media==sm {
+        @media only screen and (min-width:$sm) and (max-width:$md - 1){
+            @content;
+        }
+    }
+    @else if $media==xs {
+        @media only screen and (min-width: $xs) and (max-width:$sm - 1){
+            @content;
+        }
+    }
+}
+
+$grid-gutter-widths: (
+        xs: $grid-gutter-width-base, // 0px
+        sm: $grid-gutter-width-base, // 0px
+        md: $grid-gutter-width-base, // 0px
+        lg: $grid-gutter-width-base, // 0px
+        xl: $grid-gutter-width-base  // 0px
+);
+
+/*@mixin make-row($gutters: $grid-gutter-widths) {
+}*/
+
+@import "../../node_modules/bootstrap/scss/mixins/clearfix";
+@import "../../node_modules/bootstrap/scss/mixins/breakpoints";
+@import "../../node_modules/bootstrap/scss/mixins/grid-framework";
+@import "../../node_modules/bootstrap/scss/mixins/grid";
+
+@import "../../node_modules/bootstrap/scss/custom";
+
+@import "../../node_modules/bootstrap/scss/grid";

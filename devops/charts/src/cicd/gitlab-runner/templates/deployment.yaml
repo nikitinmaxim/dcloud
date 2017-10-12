@@ -1,0 +1,61 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: runner
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+    spec:
+      containers:
+      - name: {{ template "fullname" . }}
+        image: "{{ .Values.global.gitlab.repository }}/gitlab-runner:{{ .Values.global.gitlab.imageTag }}"
+        command: ["/bin/sh", "/scripts/entrypoint"]
+        env:
+{{ include "proxyenv" . | indent 8 }}
+        - name: KUBERNETES_HOST
+          value: https://kubernetes.default.svc.cluster.local:443
+        - name: KUBERNETES_CERT_FILE
+          value: /data/cert/my.crt
+        - name: KUBERNETES_KEY_FILE
+          value: /data/cert/my.key
+        - name: KUBERNETES_CA_FILE
+          value: /data/cert/ca.crt
+        - name: KUBERNETES_NAMESPACE
+          value: {{ .Release.Namespace }}
+        - name: KUBERNETES_SERVICE_ACCOUNT
+          value: gitlab-runner-account
+        volumeMounts:
+        - name: data-cert
+          mountPath: /data/cert
+        - name: etc-ssl
+          mountPath: /etc/ssl
+        - name: scripts
+          mountPath: /scripts
+        - name: runner-config
+          mountPath: /config
+        - name: runner-secrets
+          mountPath: /secrets
+      volumes:
+      - name: data-cert
+        hostPath:
+          path: /data/cert
+      - name: etc-ssl
+        hostPath:
+          path: /etc/ssl
+      - name: scripts
+        configMap:
+          name: runner-scripts
+      - name: runner-config
+        secret:
+          secretName: runner-config
+      - name: runner-secrets
+        secret:
+          secretName: runner-secrets

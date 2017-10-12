@@ -1,0 +1,13 @@
+dependencies:
+  - name: config-demo
+    repository: alias:commonRepo
+    version: 0.1.1
+  - name: order
+    repository: alias:commonRepo
+    version: 0.1.1
+  - name: customer
+    repository: alias:commonRepo
+    version: 0.1.1
+  - name: catalog
+    repository: alias:commonRepo
+    version: 0.1.1

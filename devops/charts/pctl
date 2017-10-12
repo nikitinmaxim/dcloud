@@ -1,0 +1,161 @@
+#!/bin/bash
+
+#. ./env.sh
+print_style () {
+
+    if [ "$2" == "info" ] ; then
+        COLOR="96m";
+    elif [ "$2" == "success" ] ; then
+        COLOR="92m";
+    elif [ "$2" == "warning" ] ; then
+        COLOR="93m";
+    elif [ "$2" == "danger" ] ; then
+        COLOR="91m";
+    else #default color
+        COLOR="0m";
+    fi
+
+    STARTCOLOR="\e[$COLOR";
+    ENDCOLOR="\e[0m";
+
+    printf "$STARTCOLOR%b$ENDCOLOR" "$1";
+}
+
+
+
+bold() { print_style "$@" "success"; }
+red() { echo -e "\e[31m$@\e[0m" ; }
+green() { echo -e "\e[32m$@\e[0m" ; }
+title() { bold "$@\n" | cat ; }
+operation=${1}
+
+usage(){
+cat <<EOF
+
+  Usage: $0
+  minikube-start: Иницализация и запуск kubernetes кластера
+  minikube-stop: Останов кластера
+  minikube-delete: Удаление кластера
+  build-image: Сборка локального докер-образа. вызывается в каталоге с Dockerfile. например pclt build-image имя_образа [имя_каталога(с докерфайлом)]
+  list-images: Список всех доступных локально докер-образов
+  build: Сборка helm-чартов платформы
+  deploy: Диплой платформы в кластер. параметры: нэймспейс:имя_релиза | доп параметры из helm deploy
+  undeploy: Удаление релиза. параметр имя_релиза
+  upgrade: Обновление релиза. параметры: имя_релиза файл_релиза доп параметры, например -f values
+  releases: Список установленных релизов в кластере
+  dashboard: Открытие в браузере панели управления kubernetes
+  connect: Подключение к удаленному kubernetes, с параметрами имя_кластера http://<master-ip>:<port> пользователь
+
+  Примеры:
+    #Старт кластера
+    pctl minikube-start --cpus 4 --memory 16000 --insecure-registry=registry.cicd.zotona.com
+
+    # Сборка всех хельм-чартов
+    pctl build
+
+    # Деплой платформы с кастомными параметрами взтыми из фала + переопределение параметра из коммандной строки
+    pctl deploy platform:platform repo/platform-0.1.1.tgz -f values-test.yaml -f values-dev.yaml --set global.ingress.suffix=$(minikube ip).nip.io
+
+EOF
+}
+
+if [ $# -lt 1 ]; then
+  usage
+  exit 1
+fi
+
+case $operation in
+    minikube-start)
+        if [ "$(uname)" == "Darwin" ]; then
+          VM_DRIVER=xhyve
+        else
+          VM_DRIVER=virtualbox
+        fi
+        if [[ "$2" = *vm-driver* ]] ; then
+          ARR=(${2//=/ })
+          VM_DRIVER=${ARR[1]}
+        fi
+    
+        minikube start --vm-driver=$VM_DRIVER --memory 8192 $3 $4 $5 $6 $7 $8 $9
+	    minikube addons enable ingress
+		#wait for cluster warming up
+		# this for loop waits until kubectl can access the api server that minikube has created
+		for i in {1..150} # timeout for 5 minutes
+		do
+		   kubectl get po &> /dev/null
+		   if [ $? -ne 1 ]; then
+		      break
+		  fi
+		  sleep 2
+		done	
+		
+		helm init
+		title "Waiting for the tiller"
+		until kubectl get pods -o 'custom-columns=NAME:.metadata.name,STATUS:.status.phase' -n kube-system | grep tiller | awk '{print $2}' | grep Running > /dev/null ; do sleep 2; echo -n "."; done
+	   ;;
+
+    minikube-stop)
+        minikube stop
+    ;;
+
+    minikube-delete)
+        minikube delete
+    ;;
+
+    build-image)
+        eval $(minikube docker-env) && docker build -t ${2} ${3:-.} $4 $5
+    ;;
+
+    list-images)
+        eval $(minikube docker-env) && docker images
+    ;;
+
+
+    connect)
+       title "Connect to remote cluster" | cat
+		kubectl config set-cluster ${2} --server=${3}
+		kubectl config set-context ${2} --cluster=${2} --user=${4}
+		kubectl config use-context ${2}
+		kubectl get svc --namespace platform | cat
+		helm init --client-only & sleep 3
+    ;;
+
+    build)
+        title "Build helm charts"
+        make clean all
+    ;;
+
+    deploy)
+        title "Deploying release"
+		array=(${2//:/ })
+		ns=${array[0]}
+		name=${array[1]}
+		helm del $name --purge || true && helm install --namespace $ns --name $name $3 $4 $5 $6 $7 $8 $9
+    ;;
+
+    upgrade)
+        title "Upgrading release"
+        name=${2}
+        helm upgrade $name $3 $4 $5 $6 $7 $8 $9
+    ;;
+    
+    undeploy)
+        title "Undeploying  release"
+        name=${2:-platform}
+        helm delete ${name} --purge
+    ;;
+
+    dashboard)
+        minikube dashboard
+    ;;
+
+    cadvisor)
+        xdg-open http://$(minikube ip):4194/containers/
+    ;;
+
+    releases)
+        helm list --all
+    ;;
+
+
+esac

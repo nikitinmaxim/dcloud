@@ -1,0 +1,994 @@
+storage:
+  filesystems:
+    - name: data
+      path: /sysroot
+  files:
+    - path: /data/cert/ca.crt
+      filesystem: data
+      mode: 0755
+      contents:
+        inline: |
+{{cacrt}}
+    - path: /data/cert/my.crt
+      filesystem: data
+      mode: 0755
+      contents:
+        inline: |
+{{mycrt}}
+    - path: /data/cert/my.key
+      filesystem: data
+      mode: 0755
+      contents:
+        inline: |
+{{mykey}}
+{% if (kind == 'manager') %}
+    - path: /data/cert/serviceaccount.key
+      filesystem: data
+      mode: 0755
+      contents:
+        inline: |
+{{serviceaccount}}
+{% endif %}
+    - path: /data/cert/my.bundle
+      filesystem: data
+      mode: 0755
+      contents:
+        inline: |
+{{mybundle}}
+    - path: /etc/ssl/certs/external.pem
+      filesystem: data
+      mode: 0644
+      contents:
+        inline: |
+{{externalcert}}
+    - path: /data/bin/persistent-init
+      filesystem: data
+      mode: 0755
+      contents:
+        inline: |
+          #!/bin/bash
+          mkdir -p /data/persistent
+          [ -e /dev/sda1 ] || {
+            parted -s /dev/sda mklabel msdos
+            parted -s /dev/sda mkpart primary 0% 100%
+            mkfs.ext4 /dev/sda1
+          }
+          mount /dev/sda1 /data/persistent
+          chmod 777 /data/persistent
+          cp /data/cert/ca.crt /etc/ssl/certs/cluster-ca.pem
+          update-ca-certificates
+    - path: /etc/profile.d/data-bin.sh
+      filesystem: data
+      mode: 0755
+      contents:
+        inline: |
+          #!/bin/bash
+          export "PATH=/data/bin:$PATH"
+    - path: /data/bin/ssh-init
+      filesystem: data
+      mode: 0755
+      contents:
+        inline: |
+          #!/bin/bash
+          mkdir -p /data/persistent/ssh
+          for type in dsa ecdsa ed25519 rsa; do
+            key="/data/persistent/ssh/ssh_host_${type}_key"
+            [ -e $key ] || ssh-keygen -t $type -f $key -q -N ""
+          done
+    - path: /data/bin/etcd-ready
+      filesystem: data
+      mode: 0755
+      contents:
+        inline: |
+          #!/bin/bash
+          while ! /data/bin/etcdctl ls; do
+            sleep 1
+          done
+    - path: /data/bin/avahi-ready
+      filesystem: data
+      mode: 0755
+      contents:
+        inline: |
+          #!/bin/bash
+          until [ -e /var/run/avahi.uuid ]; do sleep 1; done
+          until rkt status $(</var/run/avahi.uuid) | grep -q state=running; do sleep 1; done
+          until rkt enter $(</var/run/avahi.uuid) /bin/sh -c "avahi-browse _nodeinfo_{{cluster}}._sub._workstation._tcp -rpt" | grep '"{{kind}}"$' | awk -F ';' '{print $4}' | grep -q '^{{host}}$'; do sleep 1; done
+    - path: /data/bin/bind9-ready
+      filesystem: data
+      mode: 0755
+      contents:
+        inline: |
+          #!/bin/bash
+          until dig @127.0.0.1 ns.{{cluster}}.{{domain}}; do sleep 1; done
+          sed '/^DNS=/d' -i /etc/systemd/network/en.network
+          sed '/^nameserver/d' -i /etc/resolv.conf
+          echo DNS=127.0.0.1 >> /etc/systemd/network/en.network
+    - path: /data/bin/net-reload
+      filesystem: data
+      mode: 0755
+      contents:
+        inline: |
+          #!/bin/bash
+          links=$(ip link show label en* | grep -Po '^\d+:\s+\K[^:]*')
+          for v in $links; do
+            for i in $(ip addr show dev $v | grep -Po 'inet\s+\K[0-9./]*'); do
+              ip addr del $i dev $v 
+            done
+          done
+          systemctl restart systemd-networkd
+          systemctl restart systemd-resolved
+    - path: /data/bin/avahi-react
+      filesystem: data
+      mode: 0755
+      contents:
+        inline: |
+          #!/bin/bash
+          rkt enter $(</var/run/avahi.uuid) /bin/sh -c 'avahi-browse _nodeinfo_{{cluster}}._sub._workstation._tcp -rp' | stdbuf -oL -eL awk -F ';' '/^=/{host=$4; ip=$8; gsub(/"/, "", $10); kind=$10; print kind, host, ip}' | while read kind host ip; do /data/bin/nodeadd $kind $host $ip & done
+    - path: /data/bin/nodeadd
+      filesystem: data
+      mode: 0755
+      contents:
+        inline: |
+          #!/bin/bash
+          kind=$1
+          host=$2
+          ip=$3
+          echo "Node $kind/$host with ip $ip"
+          echo -e "server 127.0.0.1\nupdate delete ${host}.{{cluster}}.{{domain}} A\nupdate add ${host}.{{cluster}}.{{domain}} 86400 A ${ip}\nsend" | nsupdate
+          case $kind in
+            "manager")
+{% if (kind == 'manager') %}
+            /data/bin/managerupd
+{% else %}
+            /data/bin/proxyupd
+{% endif %}
+            ;;
+          esac
+    - path: /data/bin/proxyupd
+      filesystem: data
+      mode: 0755
+      contents:
+        inline: |
+          #!/bin/bash
+          apiservers=$(rkt enter $(</var/run/avahi.uuid) /bin/sh -c 'avahi-browse _nodeinfo_{{cluster}}._sub._workstation._tcp -rpt' |  grep '"manager"$' | awk -F ';' '{printf("server %s %s.{{cluster}}.{{domain}}:8443 ssl crt /data/cert/my.bundle ca-file /data/cert/ca.crt check\n", $4, $4)}')
+          etcdservers=$(rkt enter $(</var/run/avahi.uuid) /bin/sh -c 'avahi-browse _nodeinfo_{{cluster}}._sub._workstation._tcp -rpt' |  grep '"manager"$' | awk -F ';' '{printf("server %s %s.{{cluster}}.{{domain}}:2379 ssl crt /data/cert/my.bundle ca-file /data/cert/ca.crt check\n", $4, $4)}')
+          cat <<EOF > /data/conf/proxy.conf
+          defaults
+            mode http
+            timeout connect 5s
+            timeout client 5m
+            timeout server 5m
+          frontend apiserver
+            bind 127.0.0.1:8080
+            use_backend apiserver-backend
+          frontend etcd
+            bind 127.0.0.1:2379 ssl crt /data/cert/my.bundle ca-file /data/cert/ca.crt verify required
+            use_backend etcd-backend
+          backend apiserver-backend
+          $(echo "$apiservers" | sed 's/^/  /g')
+          backend etcd-backend
+          $(echo "$etcdservers" | sed 's/^/  /g')
+          EOF
+          [ -e "/var/run/proxy.uuid" ] && rkt enter $(</var/run/proxy.uuid) /bin/sh -c 'pkill -SIGUSR2 -e haproxy-systemd' || true
+    - path: /data/bin/managerupd
+      filesystem: data
+      mode: 0755
+      contents:
+        inline: |
+          #!/bin/bash
+          clusterspec=$(rkt enter $(</var/run/avahi.uuid) /bin/sh -c 'avahi-browse _nodeinfo_{{cluster}}._sub._workstation._tcp -rpt' | grep '"manager"$' | awk -F ';' '{print $4 "=https://" $4 ".{{cluster}}.{{domain}}:2380"}' | tr '\n' ',' | sed 's/,$//g')
+          clusterstate=existing
+
+          if [ ! -e /data/persistent/etcd_success ]; then
+            current=$(echo $clusterspec | tr ',' '\n' | wc -l)
+            expected={{ groups['manager'] | length }}
+            if [ $current -lt $expected ]; then
+              echo "Waiting for members (${current}/${expected})"
+              exit
+            fi
+
+            if /data/bin/etcdctl_but cluster-health; then
+              /data/bin/etcdctl_but member add {{host}} https://{{host}}.{{cluster}}.{{domain}}:2380
+            else
+              clusterstate=new
+            fi
+            echo "Waiting for members (${current}/${expected}) done, booting cluster"
+          fi
+
+          cat <<EOF > /data/conf/etcd.env
+          ETCD_DATA_DIR=/data/persistent/etcd
+          ETCD_NAME={{host}}
+          ETCD_LISTEN_CLIENT_URLS=https://0.0.0.0:2379
+          ETCD_LISTEN_PEER_URLS=https://0.0.0.0:2380
+          ETCD_ADVERTISE_CLIENT_URLS=https://{{host}}.{{cluster}}.{{domain}}:2379
+          ETCD_INITIAL_ADVERTISE_PEER_URLS=https://{{host}}.{{cluster}}.{{domain}}:2380
+          ETCD_INITIAL_CLUSTER=$clusterspec
+          ETCD_INITIAL_CLUSTER_STATE=$clusterstate
+          ETCD_TRUSTED_CA_FILE=/data/cert/ca.crt
+          ETCD_CERT_FILE=/data/cert/my.crt
+          ETCD_KEY_FILE=/data/cert/my.key
+          ETCD_PEER_TRUSTED_CA_FILE=/data/cert/ca.crt
+          ETCD_PEER_CERT_FILE=/data/cert/my.crt
+          ETCD_PEER_KEY_FILE=/data/cert/my.key
+          ETCD_CLIENT_CERT_AUTH=true
+          ETCD_PEER_CLIENT_CERT_AUTH=true
+          EOF
+          systemctl start etcd-member
+    - path: /data/conf/kubeconfig
+      filesystem: data
+      mode: 0644
+      contents:
+        inline: |
+          current-context: {{cluster}}-context
+          apiVersion: v1
+          clusters:
+            - name: {{cluster}}-cluster
+              cluster:
+                api-version: v1
+                server: http://127.0.0.1:8080
+          users:
+            - name: {{cluster}}-user
+              user:
+                client-certificate: /data/cert/my.crt
+                client-key: /data/cert/my.key
+          contexts:
+            - name: {{cluster}}-context
+              context:
+                cluster: {{cluster}}-cluster
+                namespace: {{cluster}}-namespace
+                user: {{cluster}}-user
+    - path: /data/bin/kubectl
+      filesystem: data
+      mode: 0755
+      contents:
+        inline: |
+          #!/bin/bash
+          exec sudo rkt enter $(</var/run/kubelet.uuid) /kubectl "$@"
+    - path: /data/bin/etcdctl
+      filesystem: data
+      mode: 0755
+      contents:
+        inline: |
+          #!/bin/bash
+          exec /usr/bin/etcdctl --endpoints=https://127.0.0.1:2379 --cert-file=/data/cert/my.crt --key-file=/data/cert/my.key --ca-file=/data/cert/ca.crt "$@"
+    - path: /data/bin/etcdctl_but
+      filesystem: data
+      mode: 0755
+      contents:
+        inline: |
+          #!/bin/bash
+          clusterspec=$(rkt enter $(</var/run/avahi.uuid) /bin/sh -c 'avahi-browse _nodeinfo_{{cluster}}._sub._workstation._tcp -lrpt' | grep '"manager"$' | awk -F ';' '{print "https://" $4 ".{{cluster}}.{{domain}}:2379"}' | tr '\n' ',' | sed 's/,$//g')
+          exec /usr/bin/etcdctl --endpoints=$clusterspec --cert-file=/data/cert/my.crt --key-file=/data/cert/my.key --ca-file=/data/cert/ca.crt "$@"
+    - path: /data/bin/ssh-authorize
+      filesystem: data
+      mode: 0755
+      contents:
+        inline: |
+          #!/bin/bash
+          . /etc/profile
+          echo {{sshkeys}} | base64 -d
+          ( etcdctl ls --recursive -p /cluster/auth/ssh-auth 2>/dev/null | grep -v '/$' | xargs -n1 etcdctl get ) || true
+    - path: /etc/modules-load.d/dm_thin_pool.conf
+      filesystem: data
+      mode: 0644
+      contents:
+        inline: |
+          dm-thin-pool
+    - path: /data/conf/avahi/avahi-daemon.conf
+      filesystem: data
+      mode: 0644
+      contents:
+        inline: |
+          [server]
+          host-name={{host}}
+          domain-name=local
+          use-ipv4=yes
+          use-ipv6=no
+          deny-interfaces=docker0,cni0,flannel.1
+          enable-dbus=yes
+          allow-point-to-point=yes
+          ratelimit-interval-usec=1000000
+          ratelimit-burst=1000
+          [wide-area]
+          enable-wide-area=yes
+          [publish]
+          publish-aaaa-on-ipv4=no
+          publish-a-on-ipv6=no
+          [reflector]
+          [rlimits]
+          rlimit-core=0
+          rlimit-data=4194304
+          rlimit-fsize=0
+          rlimit-nofile=768
+          rlimit-stack=4194304
+          rlimit-nproc=3
+    - path: /etc/nsswitch.conf
+      filesystem: data
+      mode: 0644
+      contents:
+        inline: |
+          # /etc/nsswitch.conf:
+          passwd:      files usrfiles
+          shadow:      files usrfiles
+          group:       files usrfiles
+          hosts:       files usrfiles resolve [!UNAVAIL=return] dns
+          networks:    files usrfiles dns
+          services:    files usrfiles
+          protocols:   files usrfiles
+          rpc:         files usrfiles
+          ethers:      files
+          netmasks:    files
+          netgroup:    files
+          bootparams:  files
+          automount:   files
+          aliases:     files
+    - path: /etc/dbus-1/system.d/avahi.conf
+      filesystem: data
+      mode: 0644
+      contents:
+        inline: |
+          <!DOCTYPE busconfig PUBLIC
+          "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"
+          "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+          <busconfig>
+            <policy user="root">
+              <allow own="org.freedesktop.Avahi"/>
+              <allow send_destination="org.freedesktop.Avahi"/>
+              <allow receive_sender="org.freedesktop.Avahi"/>
+            </policy>
+          </busconfig>
+    - path: /data/conf/avahi/services/nodeinfo.service
+      filesystem: data
+      mode: 0644
+      contents:
+        inline: |
+          <?xml version="1.0" standalone='no'?>
+          <!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+          <service-group>
+            <name>{{host}}</name>
+            <service>
+              <type>_workstation._tcp</type>
+              <subtype>_nodeinfo_{{cluster}}._sub._workstation._tcp</subtype>
+              <port>0</port>
+              <txt-record>{{kind}}</txt-record>
+            </service>
+          </service-group>
+    - path: /data/conf/bind/zones/{{cluster}}.{{domain}}.zone
+      filesystem: data
+      mode: 0644
+      contents:
+        inline: |
+          $ORIGIN {{cluster}}.{{domain}}.
+          $TTL 86400
+          @     IN     SOA    ns.{{cluster}}.{{domain}}.    hostmaster.{{cluster}}.{{domain}}. (
+                              2001062501 ; serial
+                              21600      ; refresh after 6 hours
+                              3600       ; retry after 1 hour
+                              604800     ; expire after 1 week
+                              86400 )    ; minimum TTL of 1 day
+
+                IN     NS     ns.{{cluster}}.{{domain}}.
+          ns    IN     A      127.0.0.1
+    - path: /data/conf/bind/named.conf
+      filesystem: data
+      mode: 0644
+      contents:
+        inline: |
+          options {
+            directory "/var/bind";
+            listen-on { 127.0.0.1; };
+            listen-on-v6 { none; };
+            recursion yes;
+            allow-recursion {
+              127.0.0.1/32;
+            };
+            forwarders {
+{% for dns_server in dns_servers %}
+              {{dns_server}};
+{% endfor %}
+            };
+            allow-transfer { none; };
+            max-cache-ttl 0;
+            max-ncache-ttl 0;
+          };
+          zone "{{cluster}}.{{domain}}" IN {
+            type master;
+            file "/etc/bind/zones/{{cluster}}.{{domain}}.zone";
+            allow-update { 127.0.0.1/32; };
+          };
+{% if (kind == 'manager') %}
+          zone "cluster.local" IN {
+            type forward;
+            forwarders {
+              127.0.0.1 port 54;
+            };
+          };
+{% endif %}
+    - path: /etc/rkt/paths.d/paths.json
+      filesystem: data
+      mode: 0644
+      contents:
+        inline: |
+          {
+            "rktKind": "paths",
+            "rktVersion": "v1",
+            "data": "/data/persistent/rkt"
+          }
+    - path: /data/conf/cni.d/10-flannel.conf
+      filesystem: data
+      mode: 0644
+      contents:
+        inline: |
+          {
+            "name": "podnet",
+            "type": "flannel",
+            "delegate": {
+              "isDefaultGateway": true,
+              "hairpinMode": true
+            }
+          }
+    - path: /etc/systemd/network/en.network
+      filesystem: data
+      mode: 0644
+      contents:
+        inline: |
+          [Match]
+          Name=en*
+          [DHCP]
+          UseDNS=no
+          [Network]
+          Domains={{cluster}}.{{domain}}
+          DHCP=yes
+{% for dns_server in dns_servers %}
+          DNS={{dns_server}}
+{% endfor %}
+systemd:
+  units:
+    - name: persistent.service
+      enable: true
+      contents: |
+        [Unit]
+        After=local-fs.target
+        Requires=local-fs.target
+        [Service]
+        Type=oneshot
+        ExecStart=/data/bin/persistent-init
+        [Install]
+        WantedBy=local-fs.target
+    - name: sshd.service
+      enable: true
+      dropins:
+        - name: custom.conf
+          contents: |
+            [Unit]
+            After=persistent.service
+            Requires=persistent.service
+            [Service]
+            ExecStartPre=
+            ExecStartPre=/data/bin/ssh-init
+            ExecStart=
+            ExecStart=/usr/sbin/sshd -D -e \
+              -h /data/persistent/ssh/ssh_host_dsa_key \
+              -h /data/persistent/ssh/ssh_host_ecdsa_key \
+              -h /data/persistent/ssh/ssh_host_ed25519_key \
+              -h /data/persistent/ssh/ssh_host_rsa_key \
+              -o AuthorizedKeysCommandUser=root \
+              -o AuthorizedKeysCommand=/data/bin/ssh-authorize
+    - name: sshd.socket
+      mask: true
+    - name: systemd-networkd.service
+      enable: true
+    - name: systemd-resolved.service
+      enable: true
+    - name: avahi.service
+      enable: true
+      contents: |
+        [Unit]
+        After=network-online.target bind9-ready.service
+        Requires=network-online.target bind9-ready.service
+        [Service]
+        Environment="HTTP_PROXY={{http_proxy}}"
+        Environment="HTTPS_PROXY={{https_proxy}}"
+        ExecStartPre=-/usr/bin/rkt rm --uuid-file=/var/run/avahi.uuid
+        ExecStart=/usr/bin/rkt run \
+          --trust-keys-from-https \
+          --insecure-options=image \
+          --net=host \
+          --set-env=HTTP_PROXY="" \
+          --set-env=HTTPS_PROXY="" \
+          --uuid-file-save=/var/run/avahi.uuid \
+          --volume volume-var-run-dbus,kind=host,source=/var/run/dbus \
+          --volume etc-avahi,kind=host,source=/data/conf/avahi \
+          --mount volume=etc-avahi,target=/etc/avahi \
+          --stage1-from-dir=stage1-fly.aci \
+          docker://ianblenke/avahi
+        ExecStop=-/usr/bin/rkt stop --uuid-file=/var/run/avahi.uuid
+        Restart=always
+        [Install]
+        WantedBy=multi-user.target
+    - name: avahi-ready.service
+      enable: true
+      contents: |
+        [Unit]
+        After=avahi.service
+        Requires=avahi.service
+        [Service]
+        Type=oneshot
+        ExecStart=/data/bin/avahi-ready
+        [Install]
+        WantedBy=multi-user.target
+    - name: bind9-ready.service
+      enable: true
+      contents: |
+        [Unit]
+        After=bind9.service
+        Requires=bind9.service
+        [Service]
+        Type=oneshot
+        ExecStart=/data/bin/bind9-ready
+        [Install]
+        WantedBy=multi-user.target
+    - name: net-ready.service
+      enable: true
+      contents: |
+        [Unit]
+        After=avahi-ready.service bind9-ready.service
+        Requires=avahi-ready.service bind9-ready.service
+        [Service]
+        Type=oneshot
+        ExecStart=/data/bin/net-reload
+        [Install]
+        WantedBy=multi-user.target
+    - name: avahi-react.service
+      enable: true
+      contents: |
+        [Unit]
+        After=net-ready.service
+        Requires=net-ready.service
+        [Service]
+        ExecStart=/data/bin/avahi-react
+        [Install]
+        WantedBy=multi-user.target
+    - name: bind9.service
+      enable: true
+      contents: |
+        [Unit]
+        After=network-online.target
+        Requires=network-online.target
+        [Service]
+        Environment="HTTP_PROXY={{http_proxy}}"
+        Environment="HTTPS_PROXY={{https_proxy}}"
+        ExecStartPre=-/usr/bin/rkt rm --uuid-file=/var/run/bind9.uuid
+        ExecStart=/usr/bin/rkt run \
+          --trust-keys-from-https \
+          --insecure-options=image \
+          --net=host \
+          --set-env=HTTP_PROXY="" \
+          --set-env=HTTPS_PROXY="" \
+          --uuid-file-save=/var/run/bind9.uuid \
+          --volume etc-bind,kind=host,source=/data/conf/bind \
+          --mount volume=etc-bind,target=/etc/bind \
+          --stage1-from-dir=stage1-fly.aci \
+          docker://resystit/bind9 \
+          --exec=/usr/sbin/named \
+          -- \
+          -c \
+          /etc/bind/named.conf \
+          -g \
+          -u \
+          root
+        ExecStop=-/usr/bin/rkt stop --uuid-file=/var/run/bind9.uuid
+        [Install]
+        WantedBy=multi-user.target
+{% if (kind == 'manager') %}
+    - name: etcd-conf-ready.service
+      enable: false
+      contents: |
+        [Unit]
+        After=avahi-react.service
+        Requires=avahi-react.service
+        [Service]
+        Type=oneshot
+        ExecStart=/bin/sh -c '\
+          while [ ! -e /data/conf/etcd.env ]; do \
+            sleep 1; \
+          done \
+        '
+    - name: etcd-member.service
+      enable: false
+      dropins:
+        - name: custom.conf
+          contents: |
+            [Unit]
+            After=etcd-conf-ready.service network-online.target
+            Requires=etcd-conf-ready.service network-online.target
+            [Service]
+            EnvironmentFile=/data/conf/etcd.env
+            Environment="HTTP_PROXY={{http_proxy}}"
+            Environment="HTTPS_PROXY={{https_proxy}}"
+            Environment="ETCD_USER=root"
+            Environment="ETCD_IMAGE_TAG=v3.2"
+            Environment="RKT_RUN_ARGS=--uuid-file-save=/var/lib/coreos/etcd-member-wrapper.uuid \
+                         --net=host \
+                         --set-env=HTTP_PROXY= \
+                         --set-env=HTTPS_PROXY= \
+                         --dns=127.0.0.1 --dns-domain={{cluster}}.{{domain}} --dns-search={{cluster}}.{{domain}} \
+                         --mount volume=data-certs,target=/data/cert --volume data-certs,kind=host,source=/data/cert"
+            Restart=always
+    - name: etcd-check.service
+      enable: true
+      contents: |
+        [Unit]
+        After=etcd-member.service
+        Requires=etcd-member.service
+        [Service]
+        ExecStart=/bin/sh -c '\
+          while ! /data/bin/etcdctl cluster-health; do \
+            sleep 1; \
+          done && touch /data/persistent/etcd_success \
+        '
+{% else %}
+    - name: proxy.service
+      enable: true
+      contents: |
+        [Unit]
+        After=avahi-react.service net-ready.service
+        Requires=avahi-react.service net-ready.service
+        [Service]
+        Environment="HTTP_PROXY={{http_proxy}}"
+        Environment="HTTPS_PROXY={{https_proxy}}"
+        ExecStartPre=-/usr/bin/rkt rm --uuid-file=/var/run/proxy.uuid
+        ExecStartPre=/data/bin/proxyupd
+        ExecStart=/usr/bin/rkt run \
+          --trust-keys-from-https \
+          --insecure-options=image \
+          --net=host \
+          --set-env=HTTP_PROXY="" \
+          --set-env=HTTPS_PROXY="" \
+          --dns=127.0.0.1 \
+          --dns-domain={{cluster}}.{{domain}} \
+          --dns-search={{cluster}}.{{domain}} \
+          --uuid-file-save=/var/run/proxy.uuid \
+          --volume data-conf,kind=host,source=/data/conf/proxy.conf \
+          --volume data-cert,kind=host,source=/data/cert \
+          --volume etc-ssl,kind=host,source=/etc/ssl \
+          --mount volume=data-conf,target=/data/conf/proxy.conf \
+          --mount volume=data-cert,target=/data/cert \
+          --mount volume=etc-ssl,target=/etc/ssl \
+          --stage1-from-dir=stage1-fly.aci \
+          docker://haproxy:1.7 \
+          --exec=/usr/local/sbin/haproxy-systemd-wrapper \
+          -- \
+          -f /data/conf/proxy.conf \
+          -p /var/run/haproxy-private.pid
+        ExecStop=-/usr/bin/rkt stop --uuid-file=/var/run/proxy.uuid
+        Restart=always
+        [Install]
+        WantedBy=multi-user.target
+{% endif %}
+    - name: etcd-ready.service
+      enable: true
+      contents: |
+        [Unit]
+{% if (kind == 'manager') %}
+        After=etcd-member.service
+        Requires=etcd-member.service
+{% else %}
+        After=proxy.service
+        Requires=proxy.service
+{% endif %}
+        [Service]
+        Type=oneshot
+        ExecStart=/data/bin/etcd-ready
+        [Install]
+        WantedBy=multi-user.target
+    - name: flanneld.service
+      enable: true
+      dropins:
+        - name: custom.conf
+          contents: |
+            [Unit]
+            After=etcd-ready.service
+            Requires=etcd-ready.service
+            [Service]
+            Environment="HTTP_PROXY={{http_proxy}}"
+            Environment="HTTPS_PROXY={{https_proxy}}"
+            Environment="FLANNEL_OPTS=--ip-masq=true --etcd-endpoints=https://127.0.0.1:2379 --etcd-keyfile=/data/cert/my.key --etcd-certfile=/data/cert/my.crt --etcd-cafile=/data/cert/ca.crt"
+            Environment="RKT_RUN_ARGS=--uuid-file-save=/var/lib/coreos/etcd-member-wrapper.uuid \
+                         --set-env=HTTP_PROXY= \
+                         --set-env=HTTPS_PROXY= \
+                         --mount volume=data-certs,target=/data/cert --volume data-certs,kind=host,source=/data/cert"
+            ExecStartPre=/bin/sh -c '\
+              /data/bin/etcdctl get /coreos.com/network/config || /data/bin/etcdctl set /coreos.com/network/config "{ \\"Network\\": \\"{{container_net}}\\", \\"Backend\\": { \\"Type\\": \\"vxlan\\" } }" \
+            '
+            Restart=always
+    - name: docker.service
+      dropins:
+        - name: custom.conf
+          contents: |
+            [Unit]
+            After=flanneld.service
+            Requires=flanneld.service
+            [Service]
+            EnvironmentFile=/run/flannel/flannel_docker_opts.env
+            Environment="HTTP_PROXY={{http_proxy}}"
+            Environment="HTTPS_PROXY={{https_proxy}}"
+            Environment="NO_PROXY={{no_proxy}}"
+{% if insecure_registry %}
+            Environment="DOCKER_OPTS=-g /data/persistent/docker --insecure-registry {{insecure_registry}}"
+{% else %}
+            Environment="DOCKER_OPTS=-g /data/persistent/docker"
+{% endif %}
+            Environment="DOCKER_SELINUX=--selinux-enabled=false"
+            ExecStartPost=/usr/bin/ip link del docker0
+            Restart=always
+    - name: kube-image.service
+      enable: true
+      contents: |
+        [Unit]
+{% if (kind == 'manager') %}
+        After=etcd-member.service network-online.target persistent.service
+        Requires=etcd-member.service network-online.target persistent.service
+{% else %}
+        After=proxy.service network-online.target persistent.service
+        Requires=proxy.service network-online.target persistent.service
+{% endif %}
+        [Service]
+        Type=oneshot
+        ExecStart=/bin/sh -c '\
+          export HTTP_PROXY={{http_proxy}}; \
+          export HTTPS_PROXY={{https_proxy}}; \
+          until rkt --trust-keys-from-https --insecure-options=image fetch docker://{{kube_image}}; do sleep 1; done \
+        '
+    - name: kubelet.service
+      enable: true
+      contents: |
+        [Unit]
+        After=kube-image.service
+        Requires=kube-image.service
+        [Service]
+        Environment="HTTP_PROXY={{http_proxy}}"
+        Environment="HTTPS_PROXY={{https_proxy}}"
+        ExecStartPre=-/usr/bin/rkt rm --uuid-file=/var/run/kubelet.uuid
+        ExecStartPre=/usr/bin/mkdir -p /data/persistent/kubelet
+        ExecStartPre=/usr/bin/mkdir -p /data/persistent/docker
+        ExecStart=/usr/bin/rkt run \
+          --trust-keys-from-https \
+          --net=host \
+          --set-env=HTTP_PROXY="" \
+          --set-env=HTTPS_PROXY="" \
+          --uuid-file-save=/var/run/kubelet.uuid \
+          --volume data-conf,kind=host,source=/data/conf \
+          --volume data-cert,kind=host,source=/data/cert \
+          --volume data-root,kind=host,source=/data/persistent/kubelet \
+          --volume docker-root,kind=host,source=/data/persistent/docker \
+          --volume etc-ssl,kind=host,source=/etc/ssl \
+          --volume run,kind=host,source=/run \
+          --mount volume=data-conf,target=/data/conf \
+          --mount volume=data-cert,target=/data/cert \
+          --mount volume=data-root,target=/data/persistent/kubelet \
+          --mount volume=docker-root,target=/data/persistent/docker \
+          --mount volume=etc-ssl,target=/etc/ssl \
+          --mount volume=run,target=/run \
+          --dns=127.0.0.1 \
+          --dns-domain={{cluster}}.{{domain}} \
+          --dns-search={{cluster}}.{{domain}} \
+          --stage1-from-dir=stage1-fly.aci \
+          {{kube_image}} \
+          --exec=/kubelet \
+          -- \
+          --require-kubeconfig=true \
+          --kubeconfig=/data/conf/kubeconfig \
+          --root-dir=/data/persistent/kubelet \
+          --cluster-dns={{internal_dns}} \
+          --cluster-domain=cluster.local. \
+          --resolv-conf /etc/resolv.conf \
+{% if labels is defined %}
+          --node-labels={{labels}} \
+{% endif %}
+{% if (taints is defined and taint == 'true') %}
+          --register-with-taints={{taints}} \
+{% endif %}
+          --hostname-override={{host}}.{{cluster}}.{{domain}} \
+          --network-plugin=cni \
+          --cni-conf-dir=/data/conf/cni.d \
+          --container-runtime=docker \
+          --allow-privileged=true \
+          --hairpin-mode=hairpin-veth
+        ExecStop=-/usr/bin/rkt stop --uuid-file=/var/run/kubelet.uuid
+        Restart=always
+        [Install]
+        WantedBy=multi-user.target
+    - name: kube-proxy.service
+      enable: true
+      contents: |
+        [Unit]
+        After=kube-image.service
+        Requires=kube-image.service
+        [Service]
+        Environment="HTTP_PROXY={{http_proxy}}"
+        Environment="HTTPS_PROXY={{https_proxy}}"
+        ExecStartPre=-/usr/bin/rkt rm --uuid-file=/var/run/kube-proxy.uuid
+        ExecStart=/usr/bin/rkt run \
+          --trust-keys-from-https \
+          --net=host \
+          --set-env=HTTP_PROXY="" \
+          --set-env=HTTPS_PROXY="" \
+          --uuid-file-save=/var/run/kube-proxy.uuid \
+          --volume data-conf,kind=host,source=/data/conf \
+          --volume data-cert,kind=host,source=/data/cert \
+          --volume etc-ssl,kind=host,source=/etc/ssl \
+          --mount volume=data-conf,target=/data/conf \
+          --mount volume=data-cert,target=/data/cert \
+          --mount volume=etc-ssl,target=/etc/ssl \
+          --dns=127.0.0.1 \
+          --dns-domain={{cluster}}.{{domain}} \
+          --dns-search={{cluster}}.{{domain}} \
+          --stage1-from-dir=stage1-fly.aci \
+          {{kube_image}} \
+          --exec=/proxy \
+          -- \
+          --kubeconfig=/data/conf/kubeconfig
+        ExecStop=-/usr/bin/rkt stop --uuid-file=/var/run/kube-proxy.uuid
+        Restart=always
+        [Install]
+        WantedBy=multi-user.target
+{% if (kind == 'manager') %}
+    - name: kube-apiserver.service
+      enable: true
+      contents: |
+        [Unit]
+        After=kube-image.service
+        Requires=kube-image.service
+        [Service]
+        Environment="HTTP_PROXY={{http_proxy}}"
+        Environment="HTTPS_PROXY={{https_proxy}}"
+        ExecStartPre=-/usr/bin/rkt rm --uuid-file=/var/run/kube-apiserver.uuid
+        ExecStart=/usr/bin/rkt run \
+          --trust-keys-from-https \
+          --net=host \
+          --set-env=HTTP_PROXY="" \
+          --set-env=HTTPS_PROXY="" \
+          --uuid-file-save=/var/run/kube-apiserver.uuid \
+          --volume data-conf,kind=host,source=/data/conf \
+          --volume data-cert,kind=host,source=/data/cert \
+          --volume etc-ssl,kind=host,source=/etc/ssl \
+          --mount volume=data-conf,target=/data/conf \
+          --mount volume=data-cert,target=/data/cert \
+          --mount volume=etc-ssl,target=/etc/ssl \
+          --dns=127.0.0.1 \
+          --dns-domain={{cluster}}.{{domain}} \
+          --dns-search={{cluster}}.{{domain}} \
+          --stage1-from-dir=stage1-fly.aci \
+          {{kube_image}} \
+          --exec=/apiserver \
+          -- \
+          --bind-address=0.0.0.0 \
+          --etcd-servers=https://127.0.0.1:2379 \
+          --etcd-certfile=/data/cert/my.crt \
+          --etcd-keyfile=/data/cert/my.key \
+          --storage-backend=etcd3 \
+          --allow-privileged=true \
+          --service-cluster-ip-range={{service_net}} \
+          --secure-port=8443 \
+          --kubelet-preferred-address-types=ExternalDNS,ExternalIP,InternalIP \
+          --admission-control=ServiceAccount,NamespaceLifecycle,NamespaceExists,LimitRanger,ResourceQuota \
+          --client-ca-file=/data/cert/ca.crt \
+          --tls-cert-file=/data/cert/my.crt \
+          --tls-private-key-file=/data/cert/my.key \
+          --service-account-key-file=/data/cert/serviceaccount.key \
+          --runtime-config=extensions/v1beta1/networkpolicies=true \
+          --anonymous-auth=true \
+          --runtime-config=api/all=true \
+          --authorization-mode=AlwaysAllow
+        ExecStop=-/usr/bin/rkt stop --uuid-file=/var/run/kube-apiserver.uuid
+        Restart=always
+        [Install]
+        WantedBy=multi-user.target
+    - name: kube-apiserver-ready.service
+      enable: true
+      contents: |
+        [Unit]
+        After=kube-apiserver.service
+        Requires=kube-apiserver.service
+        [Service]
+        Type=oneshot
+        ExecStart=/bin/sh -c '\
+          until curl http://127.0.0.1:8080; do sleep 1; done \
+        '
+        [Install]
+        WantedBy=multi-user.target
+    - name: kube-controller-manager.service
+      enable: true
+      contents: |
+        [Unit]
+        After=kube-apiserver-ready.service kube-image.service
+        Requires=kube-apiserver-ready.service kube-image.service
+        [Service]
+        Environment="HTTP_PROXY={{http_proxy}}"
+        Environment="HTTPS_PROXY={{https_proxy}}"
+        ExecStartPre=-/usr/bin/rkt rm --uuid-file=/var/run/kube-controller-manager.uuid
+        ExecStart=/usr/bin/rkt run \
+          --trust-keys-from-https \
+          --net=host \
+          --set-env=HTTP_PROXY="" \
+          --set-env=HTTPS_PROXY="" \
+          --uuid-file-save=/var/run/kube-controller-manager.uuid \
+          --volume data-conf,kind=host,source=/data/conf \
+          --volume data-cert,kind=host,source=/data/cert \
+          --volume etc-ssl,kind=host,source=/etc/ssl \
+          --mount volume=data-conf,target=/data/conf \
+          --mount volume=data-cert,target=/data/cert \
+          --mount volume=etc-ssl,target=/etc/ssl \
+          --dns=127.0.0.1 \
+          --dns-domain={{cluster}}.{{domain}} \
+          --dns-search={{cluster}}.{{domain}} \
+          --stage1-from-dir=stage1-fly.aci \
+          {{kube_image}} \
+          --exec=/controller-manager \
+          -- \
+          --kubeconfig=/data/conf/kubeconfig \
+          --service-account-private-key-file=/data/cert/serviceaccount.key \
+          --leader-elect=true \
+          --root-ca-file=/data/cert/ca.crt
+        ExecStop=-/usr/bin/rkt stop --uuid-file=/var/run/kube-controller-manager.uuid
+        Restart=always
+        [Install]
+        WantedBy=multi-user.target
+    - name: kube-scheduler.service
+      enable: true
+      contents: |
+        [Unit]
+        After=kube-image.service
+        Requires=kube-image.service
+        [Service]
+        Environment="HTTP_PROXY={{http_proxy}}"
+        Environment="HTTPS_PROXY={{https_proxy}}"
+        ExecStartPre=-/usr/bin/rkt rm --uuid-file=/var/run/kube-scheduler.uuid
+        ExecStart=/usr/bin/rkt run \
+          --trust-keys-from-https \
+          --net=host \
+          --set-env=HTTP_PROXY="" \
+          --set-env=HTTPS_PROXY="" \
+          --uuid-file-save=/var/run/kube-scheduler.uuid \
+          --volume data-conf,kind=host,source=/data/conf \
+          --volume data-cert,kind=host,source=/data/cert \
+          --volume etc-ssl,kind=host,source=/etc/ssl \
+          --mount volume=data-conf,target=/data/conf \
+          --mount volume=data-cert,target=/data/cert \
+          --mount volume=etc-ssl,target=/etc/ssl \
+          --dns=127.0.0.1 \
+          --dns-domain={{cluster}}.{{domain}} \
+          --dns-search={{cluster}}.{{domain}} \
+          --stage1-from-dir=stage1-fly.aci \
+          {{kube_image}} \
+          --exec=/scheduler \
+          -- \
+          --kubeconfig=/data/conf/kubeconfig \
+          --leader-elect=true
+        ExecStop=-/usr/bin/rkt stop --uuid-file=/var/run/kube-scheduler.uuid
+        Restart=always
+        [Install]
+        WantedBy=multi-user.target
+{% endif %}
+    - name: open-vm-tools.service
+      enable: true
+      contents: |
+        [Unit]
+        Description=Service for virtual machines hosted on VMware
+        Documentation=http://open-vm-tools.sourceforge.net/about.php
+        ConditionVirtualization=vmware
+        [Service]
+        Restart=always
+        Environment="HTTP_PROXY={{http_proxy}}"
+        Environment="HTTPS_PROXY={{https_proxy}}"
+        ExecStart=/usr/bin/rkt run \
+          --set-env=HTTP_PROXY="" \
+          --set-env=HTTPS_PROXY="" \
+          --volume systemd,kind=host,source=/run/systemd \
+          --mount volume=systemd,target=/run/systemd \
+          --insecure-options=image \
+          --net=host docker://godmodelabs/open-vm-tools \
+          --caps-retain=CAP_SYS_ADMIN
+        [Install]
+        WantedBy=multi-user.target

@@ -1,0 +1,121 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: {{ template "prometheus.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    component: "{{ .Values.server.name }}"
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+  name: {{ template "prometheus.server.fullname" . }}
+
+spec:
+  replicas: {{ .Values.server.replicaCount }}
+  template:
+    metadata:
+    {{- if .Values.server.podAnnotations }}
+      annotations:
+{{ toYaml .Values.server.podAnnotations | indent 8 }}
+    {{- end }}
+      labels:
+        app: {{ template "prometheus.name" . }}
+        component: "{{ .Values.server.name }}"
+        release: {{ .Release.Name }}
+    spec:
+      tolerations:
+{{ toYaml .Values.global.tolerations | indent 9 }}
+      containers:
+        - name: proxy
+          image: "{{ .Values.global.repository }}/haproxy:{{ .Values.global.imageTag }}"
+          args:
+            - /usr/local/sbin/haproxy-systemd-wrapper
+            - -f
+            - /etc/haproxy/haproxy.cfg
+            - -p
+            - /var/run/haproxy-private.pid
+          ports:
+            - name: https
+              containerPort: 443
+          volumeMounts:
+            - name: certs
+              mountPath: "/data/cert"
+            - name: etc-ssl
+              mountPath: "/etc/ssl"
+            - name: proxy-config
+              mountPath: "/etc/haproxy"
+        - name: {{ template "prometheus.name" . }}-{{ .Values.server.name }}-{{ .Values.configmapReload.name }}
+          image: "{{ .Values.global.repository }}/configmap-reload:{{ .Values.global.imageTag }}"
+          args:
+            - --volume-dir=/etc/config
+            - --webhook-url=http://localhost:9090/-/reload
+          resources:
+{{ toYaml .Values.configmapReload.resources | indent 12 }}
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/config
+              readOnly: true
+
+        - name: {{ template "prometheus.name" . }}-{{ .Values.server.name }}
+          image: "{{ .Values.global.repository }}/prometheus:{{ .Values.global.imageTag }}"
+          args:
+          {{- if or .Values.alertmanager.enabled .Values.server.alertmanagerURL }}
+            - --alertmanager.url={{- if .Values.alertmanager.enabled }}http://{{ template "prometheus.alertmanager.fullname" . }}:{{ .Values.alertmanager.service.servicePort }}{{- else }}{{ .Values.server.alertmanagerURL }}{{- end }}
+          {{- end }}
+            - --config.file=/etc/config/prometheus.yml
+            - --storage.local.path={{ .Values.server.persistentVolume.mountPath }}
+            - --web.console.libraries=/etc/prometheus/console_libraries
+            - --web.console.templates=/etc/prometheus/consoles
+          {{- range $key, $value := .Values.server.extraArgs }}
+            - --{{ $key }}={{ $value }}
+          {{- end }}
+          ports:
+            - containerPort: 9090
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: 9090
+            initialDelaySeconds: 30
+            timeoutSeconds: 30
+          resources:
+{{ toYaml .Values.server.resources | indent 12 }}
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/config
+            - name: storage-volume
+              mountPath: {{ .Values.alertmanager.persistentVolume.mountPath }}
+              subPath: "{{ .Values.server.persistentVolume.subPath }}"
+          {{- range .Values.server.extraHostPathMounts }}
+            - name: {{ .name }}
+              mountPath: {{ .mountPath }}
+              readOnly: {{ .readOnly }}
+          {{- end }}
+    {{- if .Values.server.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.server.nodeSelector | indent 8 }}
+    {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.server.terminationGracePeriodSeconds }}
+      volumes:
+        - name: etc-ssl
+          hostPath:
+            path: /etc/ssl
+        - name: certs
+          hostPath:
+            path: /data/cert
+        - name: proxy-config
+          configMap:
+            name: prometheus-proxy-config
+        - name: config-volume
+          configMap:
+            name: {{ template "prometheus.server.fullname" . }}
+        - name: storage-volume
+        {{- if .Values.server.persistentVolume.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ if .Values.server.persistentVolume.existingClaim }}{{ .Values.server.persistentVolume.existingClaim }}{{- else }}{{ template "prometheus.server.fullname" . }}{{- end }}
+        {{- else }}
+          emptyDir: {}
+        {{- end -}}
+      {{- range .Values.server.extraHostPathMounts }}
+        - name: {{ .name }}
+          hostPath:
+            path: {{ .hostPath }}
+      {{- end }}

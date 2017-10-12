@@ -1,0 +1,1 @@
+FROM praseodym/elasticsearch-curator

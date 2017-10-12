@@ -1,0 +1,51 @@
+# Default values for dcloud platform.
+# Управление зависимостями платформы
+tags:
+  metrics: true
+  monitoring: true
+  rabbitmq: true
+  admin: true
+  auth: true
+  discovery: true
+  config: true
+  turbine: true
+  zipkin: true
+  gateway: true
+
+
+global:
+  minikube:
+    enabled: true
+  repository: registry.cicd.zotona.com:80/dcloud/platform/docker
+  imageTag: latest
+  proxy: {}
+  ingress:
+    http_protocol: http
+    suffix: nip.io
+    balancers: []
+  platform:
+    repository: registry.cicd.zotona.com:80/dcloud/platform
+    imageTag: latest
+  demo:
+    repository: registry.cicd.zotona.com:80/dcloud/demo
+    imageTag: latest
+  dns:
+    internal: 10.30.0.10
+  rabbitmq:
+    persistentVolume: 1Gi
+  grafana:
+    persistentVolume: 1Gi
+  prometheus:
+    alertmanagerVolume: 1Gi
+    serverVolume: 2Gi
+  storage:
+    class: "standard"
+    replicate: 0
+    nodes: []
+
+elasticsearch:
+  master:
+    # Master replica count should be (#clients / 2) + 1, and generally at least 3.
+    replicas: 1
+    env:
+      NUMBER_OF_MASTERS: "1"

@@ -1,0 +1,68 @@
+# Default values for dcloud platform.
+# Управление зависимостями платформы
+tags:
+  metrics: true
+  monitoring: true
+  rabbitmq: true
+  admin: true
+  auth: true
+  discovery: true
+  config: true
+  turbine: true
+  zipkin: true
+  gateway: true
+
+
+global:
+  minikube:
+    enabled: true
+  repository: registry.gitlab.bcs.ru:80/dcloud/platform/docker
+  imageTag: master
+  proxy:
+    http:
+      host: s-proxy-04-g.global.bcs
+      port: 8080
+    https:
+      host: s-proxy-04-g.global.bcs
+      port: 8080
+    none:
+      - localhost
+  ingress:
+    http_protocol: http
+    suffix: nip.io
+    balancers: []
+  platform:
+    repository: registry.gitlab.bcs.ru:80/dcloud/platform
+    imageTag: master
+  demo:
+    repository: registry.gitlab.bcs.ru:80/dcloud/demo
+    imageTag: master
+  dns:
+    internal: 10.30.0.10
+  rabbitmq:
+    persistentVolume: 1Gi
+  grafana:
+    persistentVolume: 1Gi
+  prometheus:
+    alertmanagerVolume: 1Gi
+    serverVolume: 2Gi
+  storage:
+    class: "standard"
+    replicate: 3
+    nodes:
+      - host: s-t-mic-stor-01.test.cluster
+        zone: 1
+        device: /dev/sdb
+      - host: s-t-mic-stor-02.test.cluster
+        zone: 1
+        device: /dev/sdb
+      - host: s-t-mic-stor-03.test.cluster
+        zone: 1
+        device: /dev/sdb
+
+elasticsearch:
+  master:
+    # Master replica count should be (#clients / 2) + 1, and generally at least 3.
+    replicas: 1
+    env:
+      NUMBER_OF_MASTERS: "1"

@@ -1,0 +1,56 @@
+# Default values for kibana.
+# Service
+name: kibana
+httpPort: 5601
+ingress:
+    ## If true, Kibana Ingress will be created
+    ##
+    enabled: true
+
+    ## Kibana Ingress annotations
+    ##
+    # annotations:
+    #   kubernetes.io/ingress.class: nginx
+    #   kubernetes.io/tls-acme: 'true'
+
+    ## kibana Ingress hostnames
+    ## Must be provided if Ingress is enabled
+    ##
+    hosts: kibana
+
+    ## Kibana Ingress TLS configuration
+    ## Secrets must be manually created in the namespace
+    ##
+    # tls:
+    #   - secretName: kibana-server-tls
+    #     hosts:
+    #       - kibana.domain.com
+
+  ## Grafana container name
+  ##
+
+# Deployment
+component: kibana-logging
+replicas: 1
+container_name: kibana-logging
+image: quay.io/dclou/proxy:kibana
+# keep request = limit to keep this container in guaranteed class
+cpu_limit: 100m
+cpu_requests: 100m
+env_name: ELASTICSEARCH_URL
+env_value: http://elasticsearch.platform.svc.cluster.local:9200
+container_port: 5601
+tolerations:
+  - key: dedicated
+    value: platform
+ #   operator: Equal
+ #   effect: NoSchedule
+
+scheduling:
+  affinity:
+    node:
+      type: #requiredDuringSchedulingIgnoredDuringExecution
+      labels:
+      # - key: iamalabelkey
+      #   operator: In
+      #   values: ["value1", "value2"]

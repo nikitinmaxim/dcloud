@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <title>Zotona</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700&amp;subset=cyrillic-ext,latin-ext">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.css">
+    <link rel="stylesheet" href="node_modules/normalize.css/normalize.css">
+    <link rel="stylesheet" href="dist/css/user.style.css">
+    <link rel="stylesheet" href="dist/css/orders-list.style.css">
+    <link rel="stylesheet" href="dist/css/order-details.style.css">
+    <link rel="stylesheet" href="dist/css/order-create.style.css">
+</head>
+<body ng-app="app">
+    <div class="container">
+        <div ng-view></div>
+    </div>
+    <script src="node_modules/angular/angular.min.js"></script>
+    <script src="node_modules/angular-route/angular-route.min.js"></script>
+    <script src="node_modules/angular-cookies/angular-cookies.min.js"></script>
+
+    <script src="app.module.js"></script>
+
+    <script src="src/user/user.module.js"></script>
+    <script src="src/user/user.service.js"></script>
+
+    <script src="src/authorization/authorization.module.js"></script>
+    <script src="src/authorization/authorization.service.js"></script>
+    <script src="src/authorization/authorization.component.js"></script>
+
+    <script src="src/order/order.module.js"></script>
+    <script src="src/order/order.service.js"></script>
+    <script src="src/order/orders-list.component.js"></script>
+    <script src="src/order/order-details.component.js"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+<form id="loginForm" name="loginForm" class="form-authorization">
+    <div class="form-authorization__element">
+        <label for="username" class="form-authorization__label">Логин</label>
+        <input type="text" class="form-authorization__input" id="username" value="{{$ctrl.user.username}}" ng-model="$ctrl.user.username" aria-describedby="emailHelp" placeholder="Введите свой логин или email" required aria-required="true">
+    </div>
+    <div class="form-authorization__element">
+        <label for="password" class="form-authorization__label">Пароль</label>
+        <input type="password" class="form-authorization__input" id="password" value="{{$ctrl.user.password}}" ng-model="$ctrl.user.password" placeholder="Введите свой пароль" required aria-required="true">
+    </div>
+    <div class="form-authorization__element form-authorization__element--hint" ng-if="$ctrl.hint">
+        <small>Вы ввели неверный логин или пароль.</small>
+    </div>
+    <button type="submit" class="form-authorization__btn-sign-in" ng-click="$ctrl.loginUser($ctrl.user.username, $ctrl.user.password)">Войти</button>
+
+    <a href="/login/code" class="form-authorization__btn-sign-in">Войти через сервер авторизации</a>
+</form>

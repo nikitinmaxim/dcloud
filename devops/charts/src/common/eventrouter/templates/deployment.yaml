@@ -1,0 +1,57 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: eventrouter
+
+spec:
+  # TODO - Set to 2 when ConfigMap locking is merged ~1.7
+  # https://github.com/kubernetes/kubernetes/pull/42666
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        component: eventrouter
+    spec:
+      containers:
+      - name: proxy
+        image: "{{ .Values.global.repository }}/haproxy:{{ .Values.global.imageTag }}"
+        args:
+          - /usr/local/sbin/haproxy-systemd-wrapper
+          - -f
+          - /etc/haproxy/haproxy.cfg
+          - -p
+          - /var/run/haproxy-private.pid
+        ports:
+          - name: https
+            containerPort: 443
+        volumeMounts:
+          - name: certs
+            mountPath: "/data/cert"
+          - name: etc-ssl
+            mountPath: "/etc/ssl"
+          - name: proxy-config
+            mountPath: "/etc/haproxy"
+      - name: eventrouter
+        image: "{{ .Values.global.repository }}/eventrouter:{{ .Values.global.imageTag }}"
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - name: config
+          mountPath: /etc/eventrouter
+        env:
+        - name: KUBERNETES_SERVICE_HOST
+          value: 127.0.0.1
+      volumes:
+      - name: etc-ssl
+        hostPath:
+          path: /etc/ssl
+      - name: certs
+        hostPath:
+          path: /data/cert
+      - name: proxy-config
+        configMap:
+          name: eventrouter-proxy-config
+      - name: config
+        configMap:
+          name: eventrouter
+      tolerations:
+{{ toYaml .Values.global.tolerations | indent 9 }}

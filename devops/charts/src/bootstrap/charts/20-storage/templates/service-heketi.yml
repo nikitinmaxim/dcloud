@@ -1,0 +1,14 @@
+{{- if not .Values.global.skipStorage -}}
+kind: Service
+apiVersion: v1
+metadata:
+  name: heketi
+  namespace: storage
+spec:
+  selector:
+    name: heketi
+  ports:
+    - name: heketi
+      port: 8080
+      targetPort: 8080
+{{- end -}}

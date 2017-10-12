@@ -1,0 +1,56 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    app: "{{ .Chart.Name }}"
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: "{{ .Chart.Name }}"
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+
+    spec:
+      containers:
+      - name: {{ template "fullname" . }}
+        image: "{{ .Values.global.gitlab.repository }}/sonarqube:{{ .Values.global.gitlab.imageTag }}"
+        env:
+{{ include "proxyenv" . | indent 8 }}
+        - name: SONARQUBE_JDBC_URL
+          value: jdbc:postgresql://{{ .Release.Name }}-{{ .Values.postgresql.nameOverride }}:{{ .Values.postgresql.service.port }}/{{ .Values.postgresql.postgresDatabase }}
+        - name: SONARQUBE_WEB_JVM_OPTS
+          value: {{ default "" .Values.webJvmOpts }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.containerPort }}
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 5
+          timeoutSeconds: 1
+        volumeMounts:
+        - name: sonar-data
+          mountPath: /opt/sonarqube/data/web
+        - name: sonar-extensions
+          mountPath: /opt/sonarqube/extensions
+        - name: config-volume   
+          mountPath: /opt/sonarqube/conf
+      volumes:
+      - name: config-volume
+        configMap:
+          name: {{ .Chart.Name }}-config
+      - name: sonar-data
+        persistentVolumeClaim:
+          claimName: {{ template "fullname" . }}-data
+      - name: sonar-extensions
+        persistentVolumeClaim:
+          claimName: {{ template "fullname" . }}-extensions

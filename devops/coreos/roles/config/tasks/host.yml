@@ -1,0 +1,24 @@
+- shell: cat "{{config_root}}/certs/{{cluster}}/ca.crt" | sed 's/^/          /g'
+  register: cacrtraw
+- shell: openssl x509 < "{{config_root}}/certs/{{cluster}}/issued/{{host}}.crt" | sed 's/^/          /g'
+  register: mycrtraw
+- shell: cat "{{config_root}}/certs/{{cluster}}/private/{{host}}.key" | sed 's/^/          /g'
+  register: mykeyraw
+- shell: cat "{{config_root}}/certs/{{cluster}}/private/serviceaccount.key" | sed 's/^/          /g'
+  register: serviceaccountraw
+- shell: ( [ -e "{{external_cert}}" ] && cat "{{external_cert}}" || true ) | sed 's/^/          /g'
+  register: externalcertraw
+- shell: cat "{{config_root}}/nodes/authorized_keys" | base64 -w0
+  register: sshkeysraw
+- name: Generate {{kind}} configs for {{host}}
+  template:
+    src: templates/config.yml
+    dest: "{{config_root}}/nodes/{{token}}.yml"
+  vars:
+    cacrt: "{{cacrtraw.stdout}}"
+    mycrt: "{{mycrtraw.stdout}}"
+    mykey: "{{mykeyraw.stdout}}"
+    serviceaccount: "{{serviceaccountraw.stdout}}"
+    externalcert: "{{externalcertraw.stdout}}"
+    mybundle: "{{mycrtraw.stdout + '\n' + mykeyraw.stdout}}"
+    sshkeys: "{{sshkeysraw.stdout}}"

@@ -1,0 +1,57 @@
+{{- $image := printf "%s/gluster:%s" .Values.global.repository .Values.global.imageTag -}}
+{{- range $index, $node := .Values.global.storage.nodes }}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{default $node.host $node.name}}-storage
+  namespace: storage
+spec:
+  volumes:
+    - name: run-lvm
+      hostPath:
+        path: /var/run/lvm
+    - name: dev
+      hostPath:
+        path: /dev
+    - name: sys-fs-cgroup
+      hostPath:
+        path: /sys/fs/cgroup
+    - name: var-lib-heketi
+      hostPath:
+        path: /data/persistent/heketi
+    - name: var-lib-glusterd
+      hostPath:
+        path: /data/persistent/glusterd
+    - name: etc-glusterfs
+      hostPath:
+        path: /data/persistent/glusterfs
+  serviceAccountName: gluster-service-account
+  containers:
+    - name: storage
+      image: "{{ $image }}"
+      volumeMounts:
+        - name: run-lvm
+          mountPath: /run/lvm
+        - name: dev
+          mountPath: /dev
+        - name: sys-fs-cgroup
+          mountPath: /sys/fs/cgroup
+        - name: var-lib-heketi
+          mountPath: /var/lib/heketi
+        - name: var-lib-glusterd
+          mountPath: /var/lib/glusterd
+        - name: etc-glusterfs
+          mountPath: /etc/glusterfs
+      securityContext:
+        privileged: true
+  hostNetwork: true
+  restartPolicy: Always
+  dnsPolicy: ClusterFirstWithHostNet
+  tolerations:
+    - key: "dedicated"
+      value: "kube-storage"
+  nodeSelector:
+    role: storage
+    kubernetes.io/hostname: {{default $node.host $node.name}}
+{{- end }}
